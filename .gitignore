@@ -1,0 +1,11 @@
+### macOS
+.DS_Store
+._*
+
+### Windows
+Thumbs.db
+[Dd]esktop.ini
+
+### 원본 오피스 파일 — md가 정본, 레포에는 올리지 않는다
+*.xlsx
+*.docx

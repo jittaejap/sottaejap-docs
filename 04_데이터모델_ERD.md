@@ -1,0 +1,290 @@
+# 소때잡 — 데이터 모델 · CSV 파싱 명세
+
+**버전:** v1.3 | **기준일:** 2026-09-02 | **담당:** 고현석
+
+> **v1.4~v1.6 변경 없음** (2026-09-02 밤 확인). 스키마는 server `V1__init.sql`(`f8e3067`)이 소유합니다. `analysisYearMonth` 산출 규칙(06 R11)은 아직 미결입니다.
+
+> 마이그레이션은 **Flyway**로 관리합니다. 개발 중 엔티티 추가는 마이그레이션 파일로 반영합니다.
+> v1.2 변경: `burdenRatio` 산식 변경(월 합계 기준) / **판정 2종 + `evaluationStatus` 분리(E-11)** /
+> `monthlyTotalAmount`·`analysisYearMonth` 신설 / `MonthlySnapshot.repeatCount` 추가
+>
+> **v1.3 변경 (레포 우선):** 규칙 엔진 = **Spring**(E-18) / `satisfaction` enum `HIGH/LOW/UNKNOWN`(E-23) / `repeatIntent` boolean nullable · `status` `ACTIVE`(E-24) /
+> `purpose`·`companion` 확정 방식(E-20) / **`FinancialChunk` 신설 (pgvector · P2, E-21)**
+
+---
+
+## 0. 스키마 변경 요약 (v1.2 → v1.3)
+
+| 엔티티 | 변경 | 이유 |
+|---|---|---|
+| `BehaviorCluster` | **`monthlyTotalAmount` 신설** | 부담 분자를 월 합계로 변경 (결정로그 E-1·B-11) |
+| `BehaviorCluster` | `burdenRatio` 산식 = `monthlyTotalAmount ÷ monthlyBudget` | 동상 |
+| `BehaviorCluster` | **`analysisYearMonth` 신설** | 어느 달의 합계인지 명시 |
+| `BehaviorCluster` | `verdict` enum → **`SUSTAIN`/`ADJUST` 2종, nullable** | `quadrant.KEEP` 충돌 제거(E-2) + 판정/상태 층위 분리(E-11) |
+| `BehaviorCluster` | **`evaluationStatus` 신설** (`RESOLVED`/`PENDING`) | 보류는 판정이 아니라 상태 (E-11) |
+| `BehaviorCluster` | `quadrant` **nullable** — `PENDING` 값 제거 | `PENDING`은 사분면이 아님 (E-11) |
+| `MonthlySnapshot` | **`repeatCount` 신설** | FR-08-07 반복 횟수 변화 |
+| `User` | **`authProvider` 신설** | SNS 간편 로그인 (E-9) |
+| `Retrospect` | `satisfaction` → **`HIGH`/`LOW`/`UNKNOWN`** (v1.3) | 레포 enum 문자열 (E-23). `MEDIUM` 없음 |
+| `Retrospect` | `repeatIntent` → **boolean nullable** (v1.3) | 레포 `repeat_intention: bool \| None` (E-24) |
+| `Retrospect` | `status` → **`ACTIVE`/`PAUSED`/`COMPLETED`** (v1.3) | 레포 `TaskStatus` (E-24) |
+| `Retrospect` | `purpose`·`companion` = **사용자 확인값** (v1.3) | AI 후보 → 사용자 확인 → 저장. 자유 문자열 거부 (E-20) |
+| **`FinancialChunk`** | **신설 (P2, v1.3)** | 금융 RAG 저장소 — pgvector (E-21·E-22) |
+
+---
+
+## 1. 엔티티
+
+### User
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| email | string | |
+| authProvider | enum | v1.2 추가 — `LOCAL` / `KAKAO` / `NAVER` / `GOOGLE` (데모는 `LOCAL` 단일) |
+| providerUserId | string | v1.2 추가 — SNS 계정 식별자, nullable |
+| monthlyBudget | int | **지출 부담 분모** |
+| outlierThreshold | float | 이상치 탐지 임계값 (사용자 설정) |
+| avgSatisfaction | float | 전체 평균 — 축소 추정용 캐시 |
+| retrospectDelayDays | int | 기본 **1** (D+1 — 결정로그 B-1) |
+| onboardingCompleted | boolean | 온보딩 5단계 완료 플래그 (최초 진입 분기 — FR-09-03) |
+
+### Transaction
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| userId | FK → User | |
+| occurredAt | timestamp | |
+| merchant | string | 원본 |
+| merchantNormalized | string | 정규화 (고유명사 유지 / 편의점 지점 표기 제거) |
+| amount | int | 원(KRW) |
+| category | string | 내부 통합 카테고리 |
+| sourceCategory | string | 카드사 원본 카테고리 |
+| cardIssuer | enum | `KB` / `HANA` / `SHINHAN` |
+| timeSlot | enum | `MORNING` 05~12 · `AFTERNOON` 12~22 · `NIGHT` 22~05 |
+| behaviorId | FK → BehaviorCluster | nullable — 회고 전 미확정 |
+| importHash | string | 중복 업로드 방지 |
+
+### Retrospect
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| transactionId | FK → Transaction | **UNIQUE** (1:1 보장 — 중복 저장 시 409) |
+| satisfaction | enum | `HIGH` +1 / `LOW` −1 / `UNKNOWN` 제외 — 3택, 중간값 없음 (v1.3 — E-23) |
+| purpose | string | 표준 태그 7종 중 하나 — **사용자가 확인한 값만**. 미확정 시 `null`. 자유 문자열은 400 거부 (v1.3 — E-20) |
+| purposeRaw | string | 사용자 원문 |
+| companion | string | 표준 태그 6종 중 하나 — **사용자가 확인한 값만**. 미확정 시 `null`. 자유 문자열은 400 거부 (v1.3 — E-20) |
+| companionRaw | string | 사용자 원문 |
+| repeatIntent | boolean | **nullable** — `true` / `false` / `null`(미확정) (v1.3 — E-24) |
+| status | enum | `ACTIVE` / `PAUSED` / `COMPLETED` (FR-04-12~14 · v1.3 — E-24) |
+| source | enum | v1.2 추가 — `CANDIDATE`(선별) / `ONBOARDING`(표본) / `MANUAL`(직접 추가, FR-03-07) |
+| createdAt | timestamp | |
+
+### BehaviorCluster
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| userId | FK → User | |
+| clusterKey | string | `카테고리\|시간대\|목적\|동행인` — **시간대는 식사 카테고리에만 포함**(B-10), 그 외는 공백 |
+| displayName | string | **AI 생성** 이름 |
+| parentId | FK → self | 롤업 상위 키 |
+| retrospectCount | int | |
+| rawAverage | float | 행동 평균 (−1 ~ +1) |
+| adjustedSatisfaction | float | 축소 추정 결과 (−1 ~ +1) |
+| avgAmount | int | **평균 거래금액 — 절감액 계산 전용** (FR-08-03) |
+| **monthlyTotalAmount** | int | **v1.2 신설 — 분석 기준월 1개월 합계 금액** |
+| **analysisYearMonth** | string | **v1.2 신설 — `2026-08`. 어느 달 합계인지 명시** |
+| txCount | int | v1.2 추가 — 기준월 거래 건수 (`monthlyTotalAmount ÷ avgAmount` 검산용) |
+| burdenRatio | float | **`monthlyTotalAmount ÷ User.monthlyBudget`** (v1.2 변경) |
+| **evaluationStatus** | enum | **v1.2 신설 — `RESOLVED` / `PENDING`.** 회고 건수 < 보류 임계값이면 `PENDING` |
+| quadrant | enum **nullable** | `PROTECT` / `KEEP` / `MINOR` / `PRIORITY` — **좌표. `PENDING`일 때 `null`** (v1.2 변경) |
+| verdict | enum **nullable** | **`SUSTAIN`(지켜요) / `ADJUST`(바꿔볼까요)** — 처방. `PENDING`일 때 `null` (v1.2 변경) |
+
+> `clusterKey` 조합·`parentId` 롤업·`burdenRatio`·`quadrant`·`verdict`는
+> **규칙 엔진(Spring·정민규)** 이 결정론적으로 산출합니다 (v1.3 — E-18). `displayName`만 AI가 생성합니다 (`/chat` `CLUSTER_NAMING`).
+>
+> ⚠️ **`avgAmount`와 `monthlyTotalAmount`의 용도를 혼동하지 마십시오.**
+> 지도 가로축 = `monthlyTotalAmount` / 절감액 = `avgAmount × adjustCount`.
+>
+> ⚠️ **`quadrant`(4, 좌표)와 `verdict`(2, 처방)는 다른 층위입니다** — 결정로그 E-11.
+> `quadrant`는 화면에 노출하지 않고 **정렬(우선순위)에만** 씁니다. 점 색상은 `verdict` 2색이며,
+> `evaluationStatus = PENDING`은 색상이 아니라 **회색 반투명 상태**로 그립니다.
+
+### Goal
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| userId | FK → User | |
+| name | string | 비상금 / 독립 / 여행 |
+| targetAmount | int | |
+| currentAmount | int | |
+| deletedAt | timestamp | v1.2 추가 — soft delete (FR-01-02 삭제) |
+
+### Suggestion
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| behaviorId | FK → BehaviorCluster | |
+| adjustCount | int | 사용자 선택 **조정 횟수** |
+| expectedSaving | int | `avgAmount × adjustCount` |
+| goalId | FK → Goal | 배분 대상 |
+| status | enum | `PROPOSED` / `ADOPTED` / `REJECTED` |
+| createdAt | timestamp | |
+
+### MonthlySnapshot
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| userId | FK → User | |
+| yearMonth | string | `2026-08` |
+| totalSpending | int | |
+| unsatisfiedCount | int | 아쉬운 소비 건수 |
+| **repeatCount** | int | **v1.2 신설 — 조정 대상 행동의 반복 횟수** (FR-08-07) |
+| savedAmount | int | 전월 대비 감소액 |
+
+### Notification
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| userId | FK → User | |
+| type | enum | `RETROSPECT_DUE`(D+1 회고 요청) / `SUGGESTION`(제안 발생) |
+| refId | int | 대상 리소스 id (candidate `transactionId` / `suggestionId`) |
+| message | string | |
+| isRead | boolean | 기본 false |
+| createdAt | timestamp | |
+
+### FinancialChunk (v1.3 신설 · P2 — E-21·E-22)
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| chunkId | string | 레포 `FinancialChunk.chunk_id` |
+| content | text | 청크 본문 |
+| source | string | 출처 (기관 · 문서명 · URL) |
+| metadata | jsonb | 기준 시점 등 — 레포 `metadata` |
+| embedding | vector(N) | pgvector — 차원 N은 임베딩 모델 확정 시 (P2) |
+
+> 사용자와 무관한 공개 문서 저장소입니다. `userId`가 없습니다.
+> 마이그레이션은 **P2 착수 시** `V3__financial_chunks.sql`로 추가하며, 그때 `CREATE EXTENSION IF NOT EXISTS vector`를 함께 실행합니다.
+
+---
+
+## 2. 관계
+
+```
+User 1 ── N Transaction
+User 1 ── N BehaviorCluster
+User 1 ── N Goal
+User 1 ── N MonthlySnapshot
+User 1 ── N Notification
+
+Transaction 1 ── 0..1 Retrospect      (transactionId UNIQUE)
+Transaction N ── 1 BehaviorCluster
+
+BehaviorCluster 1 ── N Suggestion
+BehaviorCluster N ── 1 BehaviorCluster (parent · 롤업)
+
+Suggestion N ── 1 Goal
+
+FinancialChunk — 독립 (사용자·거래와 관계 없음 · P2)
+```
+
+---
+
+## 3. 파생값 산식 (v1.3 — Spring 규칙 엔진 계약)
+
+```
+purpose / companion   = 사용자가 확인한 표준 태그 (7종 / 6종) 또는 null           # E-20 · 확인 원칙
+                        P0: 선택지 버튼 직접 선택 / P1: AI 후보 제안 → 사용자 확인
+                        자유 문자열은 Spring이 거부한다 (400). null이면 되묻기(FR-04-08)
+
+rawAverage            = Σ(HIGH:+1, LOW:−1) ÷ (UNKNOWN 제외 회고 수)             # E-23
+
+adjustedSatisfaction  = (retrospectCount × rawAverage + k × User.avgSatisfaction)
+                        ÷ (retrospectCount + k)                      # k = 미결 #15
+
+monthlyTotalAmount    = Σ Transaction.amount
+                        WHERE behaviorId = this AND yearMonth = analysisYearMonth
+
+avgAmount             = monthlyTotalAmount ÷ txCount
+
+burdenRatio           = monthlyTotalAmount ÷ User.monthlyBudget      # ← 가로축
+
+evaluationStatus      = retrospectCount < PENDING_MIN_COUNT ? PENDING : RESOLVED   # 미결 #17
+
+quadrant              = evaluationStatus == PENDING ? null
+                        : (burdenRatio ≥ Bx, adjustedSatisfaction ≥ By) 매트릭스     # 미결 #18
+                          ( ≥Bx, ≥By )=PROTECT  ( <Bx, ≥By )=KEEP
+                          ( <Bx, <By )=MINOR    ( ≥Bx, <By )=PRIORITY
+
+verdict               = evaluationStatus == PENDING ? null
+                        : adjustedSatisfaction ≥ By ? SUSTAIN : ADJUST
+                        # 세로축 부호만으로 결정. 가로축은 정렬(우선순위)에만 관여 — E-11
+
+정렬 우선순위          = ADJUST 먼저, 그 안에서 burdenRatio 내림차순
+                        ( = 지도상 오른쪽 아래부터 )
+
+expectedSaving        = avgAmount × Suggestion.adjustCount
+```
+
+> ⚠️ `k`(#15) · 롤업 기준(#16) · 보류 임계값(#17) · 축 경계 `Bx`/`By`(#18)는 **Spring `application.yml`의 `rules.*` 설정 파라미터**로 분리합니다 (07 §7).
+> 9/7 튜닝이 값 주입만으로 끝나야 합니다. `TAG_MATCH_MIN_SIMILARITY`·`EMBEDDING_MODEL`은 E-20으로 삭제되었습니다.
+
+---
+
+## 4. CSV 파싱 명세
+
+**지원 카드사:** 국민 · 하나 · 신한
+**날짜 포맷:** `2026.08.25 20:22(:30)` — 초 단위 선택적
+**필수 컬럼:** 거래일시 / 가맹점명 / 금액 / 카테고리
+
+### 카드사별 컬럼 매핑 (⚠️ 실제 헤더 확보 후 작성 — 담당 **석정한**, 기한 **9/2**)
+
+| 카드사 | 거래일시 | 가맹점명 | 금액 | 카테고리 | 인코딩 | 헤더 행 |
+|---|---|---|---|---|---|---|
+| 국민 | | | | | | |
+| 하나 | | | | | | |
+| 신한 | | | | | | |
+
+⚠️ **3사 카테고리 분류 체계가 서로 다릅니다.** 통합 매핑표가 필요합니다 (국민/신한은 별도 매핑 — FR-02-03).
+
+### 내부 통합 카테고리 (초안)
+
+식비 · 배달 · 카페 · 교통 · 쇼핑 · 문화·여가 · 의료 · 주거·통신 · 교육 · 기타
+
+### 공통 처리 규칙
+
+| 항목 | 처리 |
+|---|---|
+| 인코딩 | EUC-KR / UTF-8 자동 감지 |
+| 금액 형식 | `1,200원` → 정수 변환 |
+| 취소·환불 거래 | 제외 |
+| 카테고리 미기재 | 가맹점명 기반 추정 → 실패 시 `기타` |
+| 시간 정보 없음 | 파싱 실패로 처리 (시간대 분류 불가) |
+| 중복 판별 | `userId + occurredAt + merchant + amount` 해시 |
+
+**성능 기준 (⚠️ 잠정):** 3개월분(약 1,000건) 10초 이내 — NFR-03
+
+---
+
+## 5. 익명화 데이터 생성 규칙
+
+| 항목 | 처리 |
+|---|---|
+| 가맹점명 | 실명 → 가명 |
+| 금액 | ±10~20% 랜덤 스케일 |
+| 거래일시 | **원본 유지** |
+| 카테고리 | 원본 유지 |
+| 민감 업종 | 제외 또는 일반 카테고리로 치환 |
+
+**스크립트 담당:** **정민규**
+
+> ⚠️ 데모 대표 사례인 **심야 배달의 평균 단가는 12,000원**입니다 (결정로그 D-7).
+> 익명화 스케일링 시 이 값이 크게 벗어나지 않도록 고정 시드를 사용하십시오.
