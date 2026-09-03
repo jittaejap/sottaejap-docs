@@ -1,6 +1,6 @@
 # 소때잡 — API 명세서
 
-**버전:** v1.6 | **기준일:** 2026-09-02 | **Base URL:** `______`
+**버전:** v1.8 | **기준일:** 2026-09-03 | **Base URL:** `______`
 
 > v1.2 변경: 엔드포인트 4건 신설(21·22·23, `DELETE /goals`) / `#9` 경로 오류 정정 / `/users/me` 응답 명세 추가 /
 > **판정 2종 + `evaluationStatus` 분리(E-11)** / `boundaries` 미확정 표기 / `burdenRatio` 정의 변경
@@ -11,6 +11,8 @@
 > **v1.5 변경 (서버 스캐폴딩):** §0 오류 코드에 공통·인증 코드 6종 추가 / `POST /auth/login` 본문 명세 신설 (§2) / `/internal/ai/*`는 시크릿 미설정 시 전부 401
 >
 > **v1.6 변경 (AI 레포 조치 완료):** §3 — AI `/chat` 시크릿 검사(E-37) / `fallback` 필드 · `TaskType` 5종 · `SpringClient` 경로 6종 **레포 반영 완료**(06 R3~R5) / 봉투 해제 규칙(E-39) / 키 미설정 시 `fallback: true`(E-38)
+>
+> **v1.8 변경 (2026-09-03):** `taskType`에 `FINANCE_QA` 신설(E-47, FR-12) — `task_context.state`는 거의 빈 객체, 출처는 `reply` 문장에 자연스럽게 언급
 
 ---
 
@@ -61,7 +63,7 @@
 | `cardIssuer` | `KB` / `HANA` / `SHINHAN` |
 | `retrospectStatus` | **`ACTIVE`** / `PAUSED` / `COMPLETED` ⚠️ v1.3 변경 (E-24) |
 | `repeatIntent` | `true` / `false` / `null` — boolean nullable (v1.3 — E-24) |
-| `taskType` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / `CLUSTER_NAMING` / `ANALYSIS_NARRATE` — AI `/chat` 전용 (v1.3, §3) |
+| `taskType` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / `CLUSTER_NAMING` / `ANALYSIS_NARRATE` / `FINANCE_QA` — AI `/chat` 전용 (v1.3, §3 · v1.8 — E-47) |
 | `notificationType` | `RETROSPECT_DUE` / `SUGGESTION` |
 | `authProvider` | `LOCAL` / `KAKAO` / `NAVER` / `GOOGLE` (v1.2) |
 
@@ -529,6 +531,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `ACTION_PLAN` | `suggestion_ids[]` (상세는 pull) | 제안 이유 문장 (FR-08-01) |
 | `CLUSTER_NAMING` | `cluster_key` · `sample_merchants[]` · `tx_count` | 묶음 이름 1개, 12자 이내 (⑤ · FR-05-05) |
 | `ANALYSIS_NARRATE` | `by_verdict[]` · `by_category[]` (Spring 집계값) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지** |
+| `FINANCE_QA` | (거의 없음 — 빈 객체 `{}`) | 근거 기반 답변 문장. 출처는 문장에 자연스럽게 언급, 별도 필드 없음 (⑪ · FR-12 · v1.8 — E-47) |
 
 > `reason_code`·집계값은 항상 Spring이 `state`에 실어 보냅니다. AI가 `reason_code` 없이 이유를 만드는 경로는 없습니다 (NFR-02).
 
