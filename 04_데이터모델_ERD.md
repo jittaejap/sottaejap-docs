@@ -1,7 +1,11 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v1.3 | **기준일:** 2026-09-02 | **담당:** 고현석
+**버전:** v1.9 | **기준일:** 2026-09-03 | **담당:** 고현석
 
+> **v1.9 변경 (2026-09-03):** `Transaction.timeSlot` **4구간**으로 변경 (01 E-50). `AFTERNOON` 폐기 → `DAY`·`EVENING` 신설.
+> 스키마 소유자는 server이므로 **`V2` 마이그레이션이 필요합니다** — `time_slot`의 `CHECK` 제약과 **이미 저장된 `AFTERNOON` 값**을 함께 옮겨야 합니다 (06 R12).
+> `Retrospect`에는 `reasonCode`를 두지 않습니다 (01 E-49 계열 판단) — 후보 선별은 조회 시점 계산이라 재현되며, 지금 이력에서 선정 이유를 되짚는 요구사항이 없습니다. 필요해지면 그때 칸을 추가합니다.
+>
 > **v1.4~v1.6 변경 없음** (2026-09-02 밤 확인). 스키마는 server `V1__init.sql`(`f8e3067`)이 소유합니다. `analysisYearMonth` 산출 규칙(06 R11)은 아직 미결입니다.
 
 > 마이그레이션은 **Flyway**로 관리합니다. 개발 중 엔티티 추가는 마이그레이션 파일로 반영합니다.
@@ -62,7 +66,7 @@
 | category | string | 내부 통합 카테고리 |
 | sourceCategory | string | 카드사 원본 카테고리 |
 | cardIssuer | enum | `KB` / `HANA` / `SHINHAN` |
-| timeSlot | enum | `MORNING` 05~12 · `AFTERNOON` 12~22 · `NIGHT` 22~05 |
+| timeSlot | enum | `MORNING` 05~11(6h) · `DAY` 11~17(6h) · `EVENING` 17~22(5h) · `NIGHT` 22~05(7h) — v1.9 (E-50). `AFTERNOON` 폐기 |
 | behaviorId | FK → BehaviorCluster | nullable — 회고 전 미확정 |
 | importHash | string | 중복 업로드 방지 |
 

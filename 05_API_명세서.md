@@ -1,7 +1,10 @@
 # 소때잡 — API 명세서
 
-**버전:** v1.8 | **기준일:** 2026-09-03 | **Base URL:** `______`
+**버전:** v1.9 | **기준일:** 2026-09-03 | **Base URL:** `______`
 
+> **v1.9 변경 (계약 변경 — 07 §6 절차):** §0 `timeSlot` **4종**(`MORNING`·`DAY`·`EVENING`·`NIGHT`) — `AFTERNOON` 폐기 (E-50) /
+> §2 `GET /retrospects/candidates`에 **`from`·`to` 쿼리 신설** — 채팅 3일 창과 날짜 지정 회고 (E-48) / §3 규칙 파라미터에 `rules.chat-window-days` 추가
+>
 > v1.2 변경: 엔드포인트 4건 신설(21·22·23, `DELETE /goals`) / `#9` 경로 오류 정정 / `/users/me` 응답 명세 추가 /
 > **판정 2종 + `evaluationStatus` 분리(E-11)** / `boundaries` 미확정 표기 / `burdenRatio` 정의 변경
 >
@@ -56,7 +59,7 @@
 | enum | 값 |
 |---|---|
 | `satisfaction` | **`HIGH` / `LOW` / `UNKNOWN`** — 3택, `MEDIUM` 없음 ⚠️ v1.3 변경 (E-23) |
-| `timeSlot` | `MORNING` / `AFTERNOON` / `NIGHT` |
+| `timeSlot` | `MORNING` / `DAY` / `EVENING` / `NIGHT` | ⚠️ v1.9 변경 (E-50) — `AFTERNOON` 폐기. 05~11 / 11~17 / 17~22 / 22~05 |
 | `quadrant` | `PROTECT` / `KEEP` / `MINOR` / `PRIORITY` — **좌표. 보류 시 `null`** ⚠️ v1.2 변경 |
 | `verdict` | **`SUSTAIN`(지켜요) / `ADJUST`(바꿔볼까요)** — 처방. **보류 시 `null`** ⚠️ v1.2 변경 |
 | `evaluationStatus` | **`RESOLVED` / `PENDING`** (v1.2 신설) |
@@ -205,7 +208,14 @@
 
 | 파라미터 | 타입 | 기본값 | 설명 |
 |---|---|---|---|
-| `limit` | int | **1** | 1회 = 결제 1건. 온보딩만 예외 |
+| `limit` | int | **1** | 인앱 알림 경로 = 1건. 온보딩만 예외 |
+| `from` | date · optional | 없음 | v1.9 신설 (E-48). 조회 시작일 |
+| `to` | date · optional | 없음 | v1.9 신설 (E-48). 조회 종료일 |
+
+> **`from`·`to`가 없으면** v1.7과 동일하게 동작합니다 — `limit`만큼 반환 (기본 1건). 기존 클라이언트는 그대로 둡니다.
+> **채팅 회고 진입(FR-03-08)** 은 `from = 오늘 − (rules.chat-window-days − 1)`, `to = 오늘`로 호출하고 `limit`을 넉넉히 둡니다.
+> **날짜·기간 지정(FR-03-09)** 은 사용자가 말한 범위를 그대로 싣습니다. 3일 창은 적용하지 않습니다.
+> 어느 경로든 **오래된 거래를 제외하는 상한은 없습니다.** D+1(FR-03-02)은 하한입니다.
 
 **Response 200**
 ```json
@@ -571,6 +581,9 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `rules.pending-min-count` | #17 | 미정 (**≤ rollup-min-count**) |
 | `rules.axis-x-boundary` | #18 | 미정 (예산 대비 %) |
 | `rules.axis-y-boundary` | #18 | 미정 (0 또는 사용자 평균) |
+| `rules.chat-window-days` | — | **3** (v1.9 확정 — E-48) |
+| `rules.sensitivity.{conservative,standard,sensitive}` | #15~18과 함께 | 미정 (v1.7 — E-46 프리셋 3종) |
+| 선별 규칙 파라미터 (이상치 기준선 기간 · 표본 최소 건수 · 큰 금액 기준 비율) | **#20** | 미정 (v1.9 신설) |
 
 > `TAG_MATCH_MIN_SIMILARITY`·`EMBEDDING_MODEL`은 E-20으로 **삭제**되었습니다. 임베딩 모델은 금융 RAG(P2) 착수 시 AI 레포 `.env`에 추가합니다.
 
