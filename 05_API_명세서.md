@@ -148,6 +148,8 @@
 
 **흐름 (E-51)** — 클라이언트가 `https://kauth.kakao.com/oauth/authorize?client_id=<REST API 키>&redirect_uri=<redirectUri>&response_type=code&state=<난수>`로 이동 → 카카오가 `redirectUri?code=...&state=...`로 돌려줌 → 클라이언트가 `state`를 대조하고 이 API를 호출 → 서버가 카카오와 토큰을 교환하고 프로필(`id` · `properties.nickname` · `kakao_account.email`)을 조회한 뒤 우리 JWT만 발급합니다. 카카오 첫 로그인이면 `users` 행을 만듭니다 — **별도 회원가입 API는 없습니다** (E-52). 카카오 액세스 토큰은 저장하지 않습니다.
 
+> **9/7 스파이크 실측 (서버 구현 시 지킬 것):** ① 닉네임은 `kakao_account.profile.nickname`과 `properties.nickname` 두 곳에 같은 값이 온다 — 서버는 **`kakao_account.profile.nickname`을 우선**하고 없으면 `properties.nickname`. ② 이메일은 `kakao_account.has_email == true`이고 `email_needs_agreement == false`일 때만 `kakao_account.email`을 읽는다. 그 외는 `null`. ③ 같은 코드를 두 번 교환하면 카카오가 **400 `invalid_grant` (`error_code: KOE320`)** — 토큰 엔드포인트의 400은 전부 `OAUTH_CODE_INVALID`로, 5xx·타임아웃은 `OAUTH_PROVIDER_ERROR`로 매핑한다. ④ 콘솔의 OpenID Connect는 **끈다** (9/7 확인 후 비활성화). 켜져 있으면 scope에 `openid`가 붙고 토큰 응답에 `id_token`이 오는데, 서버는 어느 쪽이든 `id_token`을 읽지 않는다.
+
 **오류** — `OAUTH_CODE_INVALID` 400 (카카오가 코드 거부) · `OAUTH_PROVIDER_ERROR` 502 (카카오 응답 실패·타임아웃) · `UNSUPPORTED_PROVIDER` 400 · `DEMO_ACCOUNT_DISABLED` 403 · `INVALID_INPUT` 400 (`KAKAO`인데 `code`·`redirectUri` 누락 또는 목록 밖)
 
 **Response 200** (두 provider 동일)
