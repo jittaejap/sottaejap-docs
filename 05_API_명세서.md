@@ -1,8 +1,11 @@
 # 소때잡 — API 명세서
 
-**버전:** v1.10 | **기준일:** 2026-09-07 | **Base URL:** `______`
+**버전:** v2.1 | **기준일:** 2026-09-07 | **Base URL:** `______`
 
-> **v1.10 변경 (계약 변경 — 07 §6 절차):** §2 `POST /auth/login`에 **`KAKAO` 본문 확정** — `code` · `redirectUri` 필드 신설 (01 E-51) / §0 오류 코드 `OAUTH_CODE_INVALID` · `OAUTH_PROVIDER_ERROR` 신설 / `GET /users/me`에 **`nickname` 신설**, `email`은 nullable (01 E-52)
+> **v2.1 변경 (계약 변경 — 07 §6 절차):** §2 `POST /auth/login`에 **`KAKAO` 본문 확정** — `code` · `redirectUri` 필드 신설 (01 E-55) / §0 오류 코드 `OAUTH_CODE_INVALID` · `OAUTH_PROVIDER_ERROR` 신설 / `GET /users/me`에 **`nickname` 신설**, `email`은 nullable (01 E-56)
+>
+> **v2.0 변경 (계약 변경 — 07 §6 절차 · E-52):** §0 공유 enum에서 `cardIssuer` **삭제** ·
+> §2 `POST /transactions/upload`에서 `cardIssuer` 파라미터 **삭제**. 서식은 파일 머리글로 가릅니다 (04 §4).
 >
 > **v1.9 변경 (계약 변경 — 07 §6 절차):** §0 `timeSlot` **4종**(`MORNING`·`DAY`·`EVENING`·`NIGHT`) — `AFTERNOON` 폐기 (E-50) /
 > §2 `GET /retrospects/candidates`에 **`from`·`to` 쿼리 신설** — 채팅 3일 창과 날짜 지정 회고 (E-48) / §3 규칙 파라미터에 `rules.chat-window-days` 추가
@@ -54,8 +57,8 @@
 | `FORBIDDEN` | 403 | 인증됐지만 권한 없음 (v1.5) |
 | `UNSUPPORTED_PROVIDER` | 400 | `POST /auth/login`의 `provider`가 아직 구현되지 않은 값 (v1.5) |
 | `DEMO_ACCOUNT_DISABLED` | 403 | `DEMO_ACCOUNT_ENABLED=false`인데 `LOCAL` 로그인 요청 (v1.5) |
-| `OAUTH_CODE_INVALID` | 400 | `POST /auth/login`의 카카오 인가 코드를 카카오가 거부 — 만료 · 재사용 · `redirectUri` 불일치 (v1.10 — E-51) |
-| `OAUTH_PROVIDER_ERROR` | 502 | 카카오 토큰 교환·프로필 조회 실패 · 타임아웃 → 클라이언트는 다시 시도 안내 (v1.10 — E-51) |
+| `OAUTH_CODE_INVALID` | 400 | `POST /auth/login`의 카카오 인가 코드를 카카오가 거부 — 만료 · 재사용 · `redirectUri` 불일치 (v2.1 — E-55) |
+| `OAUTH_PROVIDER_ERROR` | 502 | 카카오 토큰 교환·프로필 조회 실패 · 타임아웃 → 클라이언트는 다시 시도 안내 (v2.1 — E-55) |
 | `NOT_IMPLEMENTED` | 501 | 뼈대만 있는 엔드포인트. 본선 중 임시 코드이며 시연 경로에는 남지 않아야 함 (v1.5) |
 
 ### 공통 enum
@@ -67,7 +70,6 @@
 | `quadrant` | `PROTECT` / `KEEP` / `MINOR` / `PRIORITY` — **좌표. 보류 시 `null`** ⚠️ v1.2 변경 |
 | `verdict` | **`SUSTAIN`(지켜요) / `ADJUST`(바꿔볼까요)** — 처방. **보류 시 `null`** ⚠️ v1.2 변경 |
 | `evaluationStatus` | **`RESOLVED` / `PENDING`** (v1.2 신설) |
-| `cardIssuer` | `KB` / `HANA` / `SHINHAN` |
 | `retrospectStatus` | **`ACTIVE`** / `PAUSED` / `COMPLETED` ⚠️ v1.3 변경 (E-24) |
 | `repeatIntent` | `true` / `false` / `null` — boolean nullable (v1.3 — E-24) |
 | `taskType` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / `CLUSTER_NAMING` / `ANALYSIS_NARRATE` / `FINANCE_QA` — AI `/chat` 전용 (v1.3, §3 · v1.8 — E-47) |
@@ -128,7 +130,7 @@
 
 ## 2. 상세 명세
 
-### `POST /auth/login` (v1.5 — 본문 명세 신설 · v1.10 — `KAKAO` 본문 확정, E-51)
+### `POST /auth/login` (v1.5 — 본문 명세 신설 · v2.1 — `KAKAO` 본문 확정, E-55)
 
 **Request — 데모 계정**
 ```json
@@ -142,11 +144,11 @@
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `provider` | enum `authProvider` | ✅ | `LOCAL` = 데모 계정 폴백 (E-15). `KAKAO` = 카카오 로그인 (E-51). `NAVER` · `GOOGLE`은 400 `UNSUPPORTED_PROVIDER` |
+| `provider` | enum `authProvider` | ✅ | `LOCAL` = 데모 계정 폴백 (E-15). `KAKAO` = 카카오 로그인 (E-55). `NAVER` · `GOOGLE`은 400 `UNSUPPORTED_PROVIDER` |
 | `code` | string | `KAKAO`만 ✅ | 카카오가 클라이언트 콜백으로 돌려준 인가 코드. 1회용이며 수 분 안에 만료 |
 | `redirectUri` | string | `KAKAO`만 ✅ | 인가 요청에 썼던 클라이언트 콜백 URL. 서버 `KAKAO_REDIRECT_URIS` 목록에 없으면 400 `INVALID_INPUT` |
 
-**흐름 (E-51)** — 클라이언트가 `https://kauth.kakao.com/oauth/authorize?client_id=<REST API 키>&redirect_uri=<redirectUri>&response_type=code&state=<난수>`로 이동 → 카카오가 `redirectUri?code=...&state=...`로 돌려줌 → 클라이언트가 `state`를 대조하고 이 API를 호출 → 서버가 카카오와 토큰을 교환하고 프로필(`id` · `properties.nickname` · `kakao_account.email`)을 조회한 뒤 우리 JWT만 발급합니다. 카카오 첫 로그인이면 `users` 행을 만듭니다 — **별도 회원가입 API는 없습니다** (E-52). 카카오 액세스 토큰은 저장하지 않습니다.
+**흐름 (E-55)** — 클라이언트가 `https://kauth.kakao.com/oauth/authorize?client_id=<REST API 키>&redirect_uri=<redirectUri>&response_type=code&state=<난수>`로 이동 → 카카오가 `redirectUri?code=...&state=...`로 돌려줌 → 클라이언트가 `state`를 대조하고 이 API를 호출 → 서버가 카카오와 토큰을 교환하고 프로필(`id` · `properties.nickname` · `kakao_account.email`)을 조회한 뒤 우리 JWT만 발급합니다. 카카오 첫 로그인이면 `users` 행을 만듭니다 — **별도 회원가입 API는 없습니다** (E-56). 카카오 액세스 토큰은 저장하지 않습니다.
 
 > **9/7 스파이크 실측 (서버 구현 시 지킬 것):** ① 닉네임은 `kakao_account.profile.nickname`과 `properties.nickname` 두 곳에 같은 값이 온다 — 서버는 **`kakao_account.profile.nickname`을 우선**하고 없으면 `properties.nickname`. ② 이메일은 `kakao_account.has_email == true`이고 `email_needs_agreement == false`일 때만 `kakao_account.email`을 읽는다. 그 외는 `null`. ③ 같은 코드를 두 번 교환하면 카카오가 **400 `invalid_grant` (`error_code: KOE320`)** — 토큰 엔드포인트의 400은 전부 `OAUTH_CODE_INVALID`로, 5xx·타임아웃은 `OAUTH_PROVIDER_ERROR`로 매핑한다. ④ 콘솔의 OpenID Connect는 **끈다** (9/7 확인 후 비활성화). 켜져 있으면 scope에 `openid`가 붙고 토큰 응답에 `id_token`이 오는데, 서버는 어느 쪽이든 `id_token`을 읽지 않는다.
 
@@ -191,8 +193,8 @@
 ```
 
 > 클라이언트는 `onboardingCompleted == false`이면 **2-1 온보딩**, `true`이면 **3-1 홈**으로 진입합니다.
-> `email`은 v1.10부터 **nullable**입니다 (E-52) — 카카오 계정이 이메일 동의를 거부하면 `null`. 화면에서 이메일을 필수로 그리지 마십시오.
-> `nickname`은 v1.10 신설 (E-52) — 마이페이지 `1. 프로필`의 표시 이름. 카카오 닉네임을 저장하고, 데모 계정은 `데모 사용자`. nullable이며 `null`이면 클라이언트가 `사용자`로 표시합니다.
+> `email`은 v2.1부터 **nullable**입니다 (E-56) — 카카오 계정이 이메일 동의를 거부하면 `null`. 화면에서 이메일을 필수로 그리지 마십시오.
+> `nickname`은 v2.1 신설 (E-56) — 마이페이지 `1. 프로필`의 표시 이름. 카카오 닉네임을 저장하고, 데모 계정은 `데모 사용자`. nullable이며 `null`이면 클라이언트가 `사용자`로 표시합니다.
 > ⚠️ **갭 (v1.5):** `analysisYearMonth`는 04 `User` 엔티티에 없고 산출 규칙(최근 거래월? 사용자 설정?)이 미정입니다. 서버는 확정 전까지 `null`을 내려줍니다 — 액션시트에 결정 항목으로 올립니다.
 
 ---
@@ -204,7 +206,8 @@
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | `file` | File | ✅ | CSV 또는 XLSX |
-| `cardIssuer` | enum | ✅ | `KB` / `HANA` / `SHINHAN` |
+
+카드사를 받지 않습니다 (v2.0). 서식은 파일의 머리글로 가릅니다 — 04 §4.
 
 **Response 200**
 ```json
