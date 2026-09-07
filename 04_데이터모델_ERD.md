@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.2 | **기준일:** 2026-09-07 | **담당:** 고현석
+**버전:** v2.3 | **기준일:** 2026-09-07 | **담당:** 고현석
 
+> **v2.3 변경 (2026-09-07):** 스키마 변경은 server **`V5`의 `suggestions` 인덱스 3개뿐이고 컬럼 변경은 없습니다** (01 E-72 · 06 R18). §3 산식에 6줄을 더했습니다 — `share` 분모와 `byCategory.avgAmount`(E-68) · **유효 묶음** `retrospectCount > 0 AND parentId IS NULL`(E-67) · **제안 대상**과 `Suggestion.adjustCount`(E-72 · E-73) · `Goal.projectedRate`(E-74). `Suggestion`은 사용자가 만드는 행이 아니라 **회고 저장 재계산의 파생 행**이고, 채택은 `Goal.currentAmount`를 바꾸지 않습니다 (E-72 · E-73 · E-74).
+>
 > **v2.2 변경 (2026-09-07):** 스키마 변경 없음(V5 없음). §3 산식에 **분모·null 정의**(01 E-61) · **롤업 상위 키 `카테고리|시간대||`**(E-59) · `analysisYearMonth` = **사용자의 최근 거래월**(E-60, 06 R11 종결)을 적었습니다. `BehaviorCluster.clusterKey`의 시간대 자리는 식사 목록(`rules.cluster.meal-categories`)이거나 **`기타`(미분류)일 때** 포함합니다 (E-58).
 >
 > **v2.1 변경 (2026-09-07):** `User.email` **nullable** · 소셜 계정 식별은 **`(authProvider, providerUserId)` 유일 제약** · **`User.nickname` 신설** (01 E-56). 카카오 이메일은 선택 동의라 비어서 올 수 있고, 표시 이름은 닉네임이 맡습니다. server **`V4` 마이그레이션**이 필요합니다 — `users.email`의 `NOT NULL` 해제 · **`uq_users_email` 유일 제약 삭제** · `users.nickname VARCHAR(100)` 추가(데모 계정은 `데모 사용자`로 채움). `(auth_provider, provider_user_id)` 부분 유일 인덱스는 **V1 `uq_users_provider`에 이미 있어** V4에서 만들지 않습니다 (9/7 확인). 카카오 로그인 흐름은 01 E-55.
@@ -117,6 +119,8 @@
 | quadrant | enum **nullable** | `PROTECT` / `KEEP` / `MINOR` / `PRIORITY` — **좌표. `PENDING`일 때 `null`** (v1.2 변경) |
 | verdict | enum **nullable** | **`SUSTAIN`(지켜요) / `ADJUST`(바꿔볼까요)** — 처방. `PENDING`일 때 `null` (v1.2 변경) |
 
+> **v2.3 — 유효 묶음** = `retrospectCount > 0 AND parentId IS NULL`입니다 (E-67). 지도 · 분석 집계 · 제안 대상은 전부 이 집합이며, 롤업된 리프는 상위 묶음이 대신합니다(이중 집계 방지).
+>
 > `clusterKey` 조합·`parentId` 롤업·`burdenRatio`·`quadrant`·`verdict`는
 > **규칙 엔진(Spring·정민규)** 이 결정론적으로 산출합니다 (v1.3 — E-18). `displayName`만 AI가 생성합니다 (`/chat` `CLUSTER_NAMING`).
 >
@@ -133,10 +137,12 @@
 |---|---|---|
 | id | PK | |
 | userId | FK → User | |
-| name | string | 비상금 / 독립 / 여행 |
-| targetAmount | int | |
-| currentAmount | int | |
-| deletedAt | timestamp | v1.2 추가 — soft delete (FR-01-02 삭제) |
+| name | string | 비상금 / 독립 / 여행. **v2.3:** 1~50자, 위반 400 `INVALID_INPUT` (E-74) |
+| targetAmount | int | **v2.3:** `≥ 1` (E-74) |
+| currentAmount | int | **v2.3:** `≥ 0`, 생략 시 0. **채택으로 바뀌지 않는다** — 실적 반영은 월간 리포트 몫 (E-73 · E-74) |
+| deletedAt | timestamp | v1.2 추가 — soft delete (FR-01-02 삭제). **v2.3:** 삭제 후에도 `suggestions.goal_id`는 유지, 목록은 미삭제만 `id` 오름차순 (E-74) |
+
+> **v2.3 — `adoptedSaving` · `achievementRate` · `projectedRate`는 컬럼이 아닙니다.** `GET /goals`가 조회 시점에 계산해 내리는 **파생값**입니다 (E-74) — `adoptedSaving` = 그 목표를 가리키는 ADOPTED 제안의 `expectedSaving` 합 · `achievementRate = currentAmount ÷ targetAmount` · `projectedRate = (currentAmount + adoptedSaving) ÷ targetAmount`. 저장하면 채택·철회 때마다 세 값이 어긋납니다.
 
 ### Suggestion
 
@@ -144,11 +150,15 @@
 |---|---|---|
 | id | PK | |
 | behaviorId | FK → BehaviorCluster | |
-| adjustCount | int | 사용자 선택 **조정 횟수** |
-| expectedSaving | int | `avgAmount × adjustCount` |
-| goalId | FK → Goal | 배분 대상 |
-| status | enum | `PROPOSED` / `ADOPTED` / `REJECTED` |
+| adjustCount | int | 사용자 선택 **조정 횟수**. **v2.3:** PROPOSED 초기값은 `txCount`, adopt 때 `1 ≤ n ≤ txCount` (E-72 · E-73) |
+| expectedSaving | int | `avgAmount × adjustCount`. **v2.3:** PROPOSED는 재계산마다 갱신, ADOPTED는 **채택 당시 값으로 불변** (E-72) |
+| goalId | FK → Goal | 배분 대상. **v2.3:** `ADOPTED`에만 채워지고, 목표를 soft delete해도 값은 유지 (E-73 · E-74) |
+| status | enum | `PROPOSED` / `ADOPTED` / `REJECTED`. **v2.3 전이:** `PROPOSED → ADOPTED/REJECTED` · `ADOPTED → ADOPTED`(횟수·목표 수정) · `ADOPTED → REJECTED`(철회) · `REJECTED`는 종단 (E-73) |
 | createdAt | timestamp | |
+
+> **v2.3 — 제안은 회고 저장 재계산의 파생 행입니다** (E-72). 생성 API가 없고, `recomputeAll` 끝에서 동기화합니다. 대상은 **유효 묶음**(E-67) 중 RESOLVED · `verdict = ADJUST` · `avgAmount ≠ null`인 묶음이며 묶음당 PROPOSED 1행입니다. 대상에서 빠진 PROPOSED는 삭제하고, ADOPTED · REJECTED는 보존합니다.
+> **v2.3 — server `V5` 인덱스 3개** (컬럼 변경 없음 · 06 R18): `ix_suggestions_behavior(behavior_id)` · `ix_suggestions_goal(goal_id) WHERE goal_id IS NOT NULL` · `uq_suggestions_proposed(behavior_id) WHERE status = 'PROPOSED'`.
+> `suggestions`에는 **`user_id` 컬럼이 없습니다.** 소유 확인은 `behavior_clusters` 조인으로 합니다.
 
 ### MonthlySnapshot
 
@@ -161,6 +171,8 @@
 | unsatisfiedCount | int | 아쉬운 소비 건수 |
 | **repeatCount** | int | **v1.2 신설 — 조정 대상 행동의 반복 횟수** (FR-08-07) |
 | savedAmount | int | 전월 대비 감소액 |
+
+> **v2.3 범위 밖입니다** (E-75). `GET /reports/monthly`와 함께 다음 라운드에서 정합니다 — `savedAmount`의 "전월 대비"가 무엇 대비인지, 스냅샷을 언제 만드는지가 아직 문서에 없습니다. 그전까지 제안 채택은 `Goal.currentAmount`를 바꾸지 않습니다 (E-73).
 
 ### Notification
 
@@ -254,10 +266,18 @@ verdict               = evaluationStatus == PENDING ? null
                         ( = 지도상 오른쪽 아래부터 )
 
 expectedSaving        = avgAmount × Suggestion.adjustCount
+
+share                 = monthlyTotalAmount ÷ User.monthlyBudget   (byVerdict · pending · 예산 없으면 null · 반올림 없음)   # E-68
+byCategory.avgAmount  = Σ monthlyTotalAmount ÷ Σ txCount   (정수 내림 · Σ txCount 0이면 null)                            # E-68
+유효 묶음              = retrospectCount > 0 AND parentId IS NULL   (지도 · 분석 · 제안 대상)                              # E-67
+제안 대상              = 유효 묶음 AND RESOLVED AND verdict = ADJUST AND avgAmount IS NOT NULL                             # E-72
+Suggestion.adjustCount = txCount (PROPOSED 초기값 · 재계산마다 갱신) / adopt 시 1 ≤ n ≤ txCount                             # E-72 · E-73
+Goal.projectedRate     = (currentAmount + Σ ADOPTED expectedSaving) ÷ targetAmount   (achievementRate = currentAmount ÷ targetAmount)   # E-74
 ```
 
 > ⚠️ `k`(#15) · 롤업 기준(#16) · 보류 임계값(#17) · 축 경계 `Bx`/`By`(#18)는 **Spring `application.yml`의 `rules.*` 설정 파라미터**로 분리합니다 (07 §7). **v2.2:** 잠정값 `3 · 3 · 3 · 0.1 · 0`을 기본값으로 주입했습니다 (E-57). 회고 저장 시 **사용자 전체 묶음**을 재계산합니다 (E-61).
 > 9/7 튜닝이 값 주입만으로 끝나야 합니다. `TAG_MATCH_MIN_SIMILARITY`·`EMBEDDING_MODEL`은 E-20으로 삭제되었습니다.
+> **v2.3:** 제안 대상은 유효 묶음 중 RESOLVED · `ADJUST` · `avgAmount ≠ null`이고, 제안 정렬은 `quadrant` `PRIORITY → MINOR → null` → `burdenRatio` 내림차순(`null` 마지막) → `id` 오름차순입니다 (E-72). `byCategory` 정렬은 합계 내림차순 → `category` 오름차순이며 합계 0은 제외합니다 (E-68).
 
 ---
 
