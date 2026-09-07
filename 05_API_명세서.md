@@ -1,6 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.1 | **기준일:** 2026-09-07 | **Base URL:** `______`
+**버전:** v2.2 | **기준일:** 2026-09-07 | **Base URL:** `______`
+
+> **v2.2 변경 (계약 변경 — 07 §6 절차):** §2 `GET /retrospects/candidates`의 **`reason`은 Spring 템플릿**(01 E-62) — 회고된 거래 제외 · reasonCode 우선순위 · `limit` 상한 100 명시 / §2 **`POST /retrospects/chat` 본문 신설** (E-63) / §2 `POST /retrospects` 비고에 재계산 범위 · 리프 묶음 · 예산 없을 때 `null` (E-59 · E-61 · E-64) / §1 #9 `skip`은 알림 #20으로 갈음 (E-65) / §3 규칙 파라미터 **잠정값 주입** + `rules.candidate.*` · `rules.cluster.meal-categories` (E-57) / §3 내부 API 요청 본문은 필드 `@JsonProperty` (E-66)
+>
 
 > **v2.1 변경 (계약 변경 — 07 §6 절차):** §2 `POST /auth/login`에 **`KAKAO` 본문 확정** — `code` · `redirectUri` 필드 신설 (01 E-55) / §0 오류 코드 `OAUTH_CODE_INVALID` · `OAUTH_PROVIDER_ERROR` 신설 / `GET /users/me`에 **`nickname` 신설**, `email`은 nullable (01 E-56)
 >
@@ -107,7 +110,7 @@
 | 6 | POST | `/transactions/upload` | 거래내역 업로드 | FR-02-01 | 고현석 |
 | 7 | GET | `/transactions` | 거래 목록 (필터·페이징, 회고 이력 겸용) | FR-02-02, FR-03-07 | 고현석 |
 | 8 | GET | `/retrospects/candidates` | 회고 후보 + 선정 근거 | FR-03 | 고현석 |
-| **9** | POST | **`/retrospects/candidates/{transactionId}/skip`** | 후보 제외 ⚠️ **경로 정정** | FR-03-06 | 고현석 |
+| **9** | POST | **`/retrospects/candidates/{transactionId}/skip`** | 후보 제외 ⚠️ **경로 정정** — **v2.2: 엔드포인트를 두지 않는다.** 상태를 저장하지 않으므로(E-49) 알림 읽음 #20으로 갈음 (E-65) | FR-03-06 | 고현석 |
 | 10 | POST | `/retrospects` | 회고 응답 저장 | FR-04-14 | 고현석 |
 | 11 | POST | `/retrospects/chat` | 대화형 회고 턴 — Spring이 `task_context`를 만들어 AI `POST /chat`에 위임 (§3) | FR-04 | 고현석(프록시) · 오진호(AI) |
 | 12 | GET | `/behaviors` | 반복 행동 묶음 목록 | FR-05 | 정민규 |
@@ -239,6 +242,7 @@
 > **채팅 회고 진입(FR-03-08)** 은 `from = 오늘 − (rules.chat-window-days − 1)`, `to = 오늘`로 호출하고 `limit`을 넉넉히 둡니다.
 > **날짜·기간 지정(FR-03-09)** 은 사용자가 말한 범위를 그대로 싣습니다. 3일 창은 적용하지 않습니다.
 > 어느 경로든 **오래된 거래를 제외하는 상한은 없습니다.** D+1(FR-03-02)은 하한입니다.
+> **v2.2 (E-62):** 이미 회고가 있는 거래는 제외합니다. `limit` 상한은 **100**, 정렬은 최신순. 한 거래에 여러 규칙이 맞으면 `THRESHOLD_EXCEEDED` > `TIMESLOT_OUTLIER` > `REPEATED_LOW_SATISFACTION` 순으로 하나만 씁니다. 선별 수치는 §3 `rules.candidate.*` 잠정값(E-57)이고, 이상치 배수는 `User.outlierThreshold`(없으면 `rules.sensitivity.standard`)입니다.
 
 **Response 200**
 ```json
@@ -265,7 +269,7 @@
 ```
 
 > `reasonCode` = **규칙 엔진 산출값** (결정론적, Spring 선별 쿼리 — 결정로그 §2 ⓪)
-> `reason` = AI가 `reasonCode`를 **재구성한** 문장 (FR-04-11). LLM 장애 시 `reasonCode` 기반 템플릿으로 대체
+> `reason` = ~~AI가 `reasonCode`를 **재구성한** 문장 (FR-04-11). LLM 장애 시 `reasonCode` 기반 템플릿으로 대체~~ → **v2.2 (E-62): `reasonCode`당 1문장인 Spring 템플릿**(AI `app/ai/fallback.py`와 같은 문장). 후보 N건마다 LLM 왕복을 만들지 않습니다. AI가 재구성한 문장은 `POST /retrospects/chat`의 `INTRO` 응답에서 받습니다 (FR-04-10·11)
 > ⚠️ AI가 `reasonCode` 없이 이유를 생성하는 경로는 존재하지 않습니다 (NFR-02)
 
 **`reasonCode` 목록 (확정)**
@@ -325,7 +329,57 @@
 
 > 저장 시 **Spring 규칙 엔진**이 묶음·보정·판정을 재계산합니다 (v1.3 — E-18). HTTP 호출 없음.
 > 이름이 없는 새 묶음은 AI `POST /chat`(`task = CLUSTER_NAMING`)으로 `displayName`을 받습니다 (§3).
-> `purpose`·`companion`이 표준 태그 7/6종 밖이면 **400 `INVALID_TAG`** (E-20).
+> `purpose`·`companion`이 표준 태그 7/6종 밖이면 **400 `INVALID_TAG`** (E-20). `null`은 미확정으로 허용합니다.
+> **v2.2:** 재계산은 **사용자 전체 묶음**과 `User.avgSatisfaction`입니다 (E-61). 응답과 `transactions.behaviorId`는 항상 **리프 묶음**이고, 리프 회고 수가 `rules.rollup-min-count` 미만이면 상위 묶음(`카테고리|시간대||`)에 `parentId`로 붙습니다 (E-59). `monthlyBudget`이 없으면 `burdenRatio`·`quadrant`는 `null`, `verdict`는 세로축만으로 냅니다 (E-61). `behaviorName`은 커밋 후 `CLUSTER_NAMING`으로 받고, AI가 없으면 템플릿 `"{시간대 라벨} {카테고리}"`입니다 (E-64). 남의 거래·없는 거래는 **404 `NOT_FOUND`**.
+> `source`는 `CANDIDATE` / `ONBOARDING` / `MANUAL`. 내부 AI 경로(§3 `save_reflection`)는 `source`를 보내지 않으므로 `CANDIDATE`로 저장합니다 (E-66).
+
+---
+
+### `POST /retrospects/chat` (v2.2 신설 — E-63 · FR-04 P1 자연어 경로)
+
+**상태 없는 프록시입니다.** 클라이언트가 `step`과 지금까지 확인한 값을 들고 다니고, 서버는 거래·`reasonCode`·`step`으로 `task_context`를 만들어 AI `POST /chat`(§3 `REFLECTION`)에 위임합니다. **회고 행을 만들지 않습니다** — 저장은 `POST /retrospects`.
+
+**Request**
+```json
+{
+  "transactionId": 1043,
+  "message": "어제 밤 배달, 그냥 배고파서 혼자 시켰어요",
+  "step": "SATISFACTION",
+  "reflection": { "satisfaction": "UNKNOWN", "purpose": null, "companion": null, "repeatIntent": null },
+  "recentMessages": [ { "role": "assistant", "content": "지난 금요일 밤 11시 배달, 12,000원이었어요. 만족하셨나요?" } ]
+}
+```
+
+| 필드 | 규칙 |
+|---|---|
+| `transactionId` | 필수. 내 거래가 아니면 **404 `NOT_FOUND`**, 이미 회고가 있으면 **409 `DUPLICATE_RETROSPECT`** |
+| `message` | `INTRO`에서는 생략 가능 — 서버가 고정 문구로 대체해 AI에 보냅니다(AI는 빈 메시지를 받지 않음). 그 외 단계는 필수 |
+| `step` | `INTRO` / `SATISFACTION` / `PURPOSE` / `COMPANION` / `REPEAT` / `CONFIRM`. 생략 시 `INTRO` |
+| `reflection` | 사용자가 **이미 확인한** 값. 표준 태그 밖 문자열은 **400 `INVALID_TAG`** |
+| `recentMessages` | 최근 대화. 서버는 **최근 6개**만 AI에 전달합니다 |
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "reply": "혼자 드신 충동 소비로 보이는데, 맞을까요? 만족도는 어땠는지도 알려주세요.",
+    "step": "PURPOSE",
+    "reflection": { "satisfaction": "LOW", "purpose": "충동", "companion": "혼자", "repeatIntent": null },
+    "needsClarification": true,
+    "uncertainFields": ["repeatIntent"],
+    "fallback": false
+  }
+}
+```
+
+> `reflection`은 AI가 `tool_results[tool_name = "reflection"].data`로 돌려준 **후보값**입니다. 표준 태그 7/6종 밖 문자열은 서버가 `null`로 바꿉니다 (E-20). **사용자가 확인한 뒤 `POST /retrospects`로 저장**합니다.
+> `step`은 서버가 계산한 **다음 단계**입니다 — `uncertainFields`를 `satisfaction → purpose → companion → repeatIntent` 순으로 보고, 비어 있으면 `CONFIRM`.
+> `uncertainFields`는 AI의 `uncertain_fields`를 camelCase로 바꾼 것입니다 (`repeat_intention` → `repeatIntent`).
+> `reason_code`는 서버가 ⓪ 규칙(E-62)으로 구합니다. 어떤 규칙에도 맞지 않는 거래(직접 선택)는 `MANUAL_PICK`. `INTRO`의 `reply`가 선정 이유 설명입니다 (FR-04-10·11).
+> `task_context.status`는 항상 `ACTIVE`입니다. `PAUSED` 저장·재개(FR-04-12·13, `GET /retrospects/{id}`)는 P2.
+
+**503 `LLM_UNAVAILABLE`** — AI `/chat` 15초 초과·5xx. 클라이언트는 P0 선택지 버튼 모드로 전환합니다 (S11).
 
 ---
 
@@ -582,7 +636,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `get_memory(user_id)` | GET | `/internal/ai/users/{userId}/memory` | `{ "clusters": [ {behaviorId, name, clusterKey, retrospectCount, adjustedSatisfaction, verdict} ], "recentReflections": [ … ] }` — 개인 소비 메모리 요약 |
 
 - 응답은 Spring 기본 **camelCase**입니다. AI 쪽에서 키를 변환하지 않습니다.
-- 요청 본문(`save_reflection`)은 AI가 snake_case로 보내고, Spring 컨트롤러가 `@JsonNaming(SnakeCaseStrategy)`로 받습니다.
+- 요청 본문(`save_reflection`)은 AI가 snake_case로 보내고, Spring은 DTO 필드의 **`@JsonProperty`**(E-24 · `ai/dto`와 같은 방식)로 받습니다 — v2.2 정정 (E-66). `source`가 없으면 `CANDIDATE`로 저장하고, 응답은 외부 `POST /retrospects`와 같은 객체입니다(`data`가 object여야 `SpringClient`가 봉투를 벗깁니다).
 - 외부 API와 같은 `{ success, data }` 봉투를 씁니다. **(v1.6)** `SpringClient._request`가 봉투를 벗겨 `data`만 Tool에 넘기고, `success: false`면 `SpringApiError(code)`를 일으킵니다 (E-39). Tool은 위 표의 `data` 모양을 그대로 받습니다.
 
 ### 타임아웃 · 폴백 (NFR-04 · FR-04-15)
@@ -599,14 +653,20 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 
 | 키 (`rules.*`) | 액션시트 | 잠정값 |
 |---|---|---|
-| `rules.shrinkage-k` | #15 | 3~5 |
-| `rules.rollup-min-count` | #16 | 미정 |
-| `rules.pending-min-count` | #17 | 미정 (**≤ rollup-min-count**) |
-| `rules.axis-x-boundary` | #18 | 미정 (예산 대비 %) |
-| `rules.axis-y-boundary` | #18 | 미정 (0 또는 사용자 평균) |
+| `rules.shrinkage-k` | #15 | **3** (v2.2 잠정 — E-57) |
+| `rules.rollup-min-count` | #16 | **3** (v2.2 잠정) |
+| `rules.pending-min-count` | #17 | **3** (v2.2 잠정, **≤ rollup-min-count** — 기동 시 검증) |
+| `rules.axis-x-boundary` | #18 | **0.1** (v2.2 잠정 — 월 합계가 예산의 10%) |
+| `rules.axis-y-boundary` | #18 | **0** (v2.2 잠정 — 중립) |
 | `rules.chat-window-days` | — | **3** (v1.9 확정 — E-48) |
-| `rules.sensitivity.{conservative,standard,sensitive}` | #15~18과 함께 | 미정 (v1.7 — E-46 프리셋 3종) |
-| 선별 규칙 파라미터 (이상치 기준선 기간 · 표본 최소 건수 · 큰 금액 기준 비율) | **#20** | 미정 (v1.9 신설) |
+| `rules.sensitivity.{conservative,standard,sensitive}` | #15~18과 함께 | **3.0 / 2.0 / 1.5** (v2.2 잠정 — 이상치 중앙값 배수, E-46 프리셋) |
+| `rules.candidate.outlier-baseline-days` | **#20** | **90** (v2.2 잠정 — 같은 카테고리·시간대의 기준선 기간) |
+| `rules.candidate.outlier-min-samples` | #20 | **5** (v2.2 잠정 — 미만이면 카테고리 전체로 롤업) |
+| `rules.candidate.big-amount-budget-ratio` | #20 | **0.1** (v2.2 잠정 — `THRESHOLD_EXCEEDED` = 월 예산 대비 비율) |
+| `rules.candidate.repeated-low-min-count` | #20 | **2** (v2.2 잠정 — 같은 상위 키의 `LOW` 회고 수) |
+| `rules.cluster.meal-categories` | — | **`식사,식비,음식점,외식,배달,한식,중식,일식,양식,분식,패스트푸드,카페`** (v2.2 — E-58 · B-10) |
+
+> **v2.2:** 위 잠정값은 `application.yml`의 **기본값**이고 환경변수 `RULES_*`로 덮어씁니다 (07 §7). 근거 있는 확정값이 아니며, 데이터 확보 후 값만 바꿉니다 (06 #15~#18 · #20).
 
 > `TAG_MATCH_MIN_SIMILARITY`·`EMBEDDING_MODEL`은 E-20으로 **삭제**되었습니다. 임베딩 모델은 금융 RAG(P2) 착수 시 AI 레포 `.env`에 추가합니다.
 

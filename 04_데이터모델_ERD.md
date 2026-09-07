@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.1 | **기준일:** 2026-09-07 | **담당:** 고현석
+**버전:** v2.2 | **기준일:** 2026-09-07 | **담당:** 고현석
 
+> **v2.2 변경 (2026-09-07):** 스키마 변경 없음(V5 없음). §3 산식에 **분모·null 정의**(01 E-61) · **롤업 상위 키 `카테고리|시간대||`**(E-59) · `analysisYearMonth` = **사용자의 최근 거래월**(E-60, 06 R11 종결)을 적었습니다. `BehaviorCluster.clusterKey`의 시간대 자리는 식사 목록(`rules.cluster.meal-categories`)이거나 **`기타`(미분류)일 때** 포함합니다 (E-58).
+>
 > **v2.1 변경 (2026-09-07):** `User.email` **nullable** · 소셜 계정 식별은 **`(authProvider, providerUserId)` 유일 제약** · **`User.nickname` 신설** (01 E-56). 카카오 이메일은 선택 동의라 비어서 올 수 있고, 표시 이름은 닉네임이 맡습니다. server **`V4` 마이그레이션**이 필요합니다 — `users.email`의 `NOT NULL` 해제 · **`uq_users_email` 유일 제약 삭제** · `users.nickname VARCHAR(100)` 추가(데모 계정은 `데모 사용자`로 채움). `(auth_provider, provider_user_id)` 부분 유일 인덱스는 **V1 `uq_users_provider`에 이미 있어** V4에서 만들지 않습니다 (9/7 확인). 카카오 로그인 흐름은 01 E-55.
 >
 > **v2.0 변경 (2026-09-07 — E-51~E-54):** §4 **카드사별 컬럼 매핑표 폐기**(E-51). 서식은 카드사가 아니라 머리글로 가릅니다 —
@@ -100,15 +102,15 @@
 |---|---|---|
 | id | PK | |
 | userId | FK → User | |
-| clusterKey | string | `카테고리\|시간대\|목적\|동행인` — **시간대는 식사 카테고리에만 포함**(B-10), 그 외는 공백 |
+| clusterKey | string | `카테고리\|시간대\|목적\|동행인` — **시간대는 식사 카테고리에만 포함**(B-10), 그 외는 공백. **v2.2:** 식사 목록은 `rules.cluster.meal-categories`, `기타`(미분류)도 시간대 포함 (E-58) |
 | displayName | string | **AI 생성** 이름 |
-| parentId | FK → self | 롤업 상위 키 |
+| parentId | FK → self | 롤업 상위 키 — **v2.2:** 상위 키는 `카테고리\|시간대\|\|`. 리프 회고 수 < `rules.rollup-min-count`이면 연결, 저장마다 재계산 (E-59) |
 | retrospectCount | int | |
 | rawAverage | float | 행동 평균 (−1 ~ +1) |
 | adjustedSatisfaction | float | 축소 추정 결과 (−1 ~ +1) |
 | avgAmount | int | **평균 거래금액 — 절감액 계산 전용** (FR-08-03) |
 | **monthlyTotalAmount** | int | **v1.2 신설 — 분석 기준월 1개월 합계 금액** |
-| **analysisYearMonth** | string | **v1.2 신설 — `2026-08`. 어느 달 합계인지 명시** |
+| **analysisYearMonth** | string | **v1.2 신설 — `2026-08`. 어느 달 합계인지 명시.** **v2.2:** 사용자의 **최근 거래월**(KST), 모든 묶음 동일 (E-60) |
 | txCount | int | v1.2 추가 — 기준월 거래 건수 (`monthlyTotalAmount ÷ avgAmount` 검산용) |
 | burdenRatio | float | **`monthlyTotalAmount ÷ User.monthlyBudget`** (v1.2 변경) |
 | **evaluationStatus** | enum | **v1.2 신설 — `RESOLVED` / `PENDING`.** 회고 건수 < 보류 임계값이면 `PENDING` |
@@ -218,9 +220,12 @@ purpose / companion   = 사용자가 확인한 표준 태그 (7종 / 6종) 또�
                         자유 문자열은 Spring이 거부한다 (400). null이면 되묻기(FR-04-08)
 
 rawAverage            = Σ(HIGH:+1, LOW:−1) ÷ (UNKNOWN 제외 회고 수)             # E-23
+                        UNKNOWN 제외 표본이 0이면 null                           # E-61 (v2.2)
 
-adjustedSatisfaction  = (retrospectCount × rawAverage + k × User.avgSatisfaction)
-                        ÷ (retrospectCount + k)                      # k = 미결 #15
+adjustedSatisfaction  = (n × rawAverage + k × User.avgSatisfaction)
+                        ÷ (n + k)                                    # k = #15 (v2.2 잠정 3 — E-57)
+                        n = UNKNOWN 제외 회고 수 (rawAverage와 같은 분모)          # E-61
+                        전부 UNKNOWN이면 adjusted = User.avgSatisfaction, 첫 회고의 avgSatisfaction = 0
 
 monthlyTotalAmount    = Σ Transaction.amount
                         WHERE behaviorId = this AND yearMonth = analysisYearMonth
@@ -228,8 +233,13 @@ monthlyTotalAmount    = Σ Transaction.amount
 avgAmount             = monthlyTotalAmount ÷ txCount
 
 burdenRatio           = monthlyTotalAmount ÷ User.monthlyBudget      # ← 가로축
+                        monthlyBudget이 없거나 0이면 null → quadrant도 null, verdict는 세로축만   # E-61
 
-evaluationStatus      = retrospectCount < PENDING_MIN_COUNT ? PENDING : RESOLVED   # 미결 #17
+evaluationStatus      = retrospectCount < PENDING_MIN_COUNT ? PENDING : RESOLVED   # #17 (v2.2 잠정 3) — UNKNOWN 포함 건수
+
+parentId              = retrospectCount < ROLLUP_MIN_COUNT ? 상위 묶음(`카테고리|시간대||`) : null   # #16 (v2.2 잠정 3) · E-59
+                        상위 묶음의 집계 = 자식 회고 전체의 합집합. 저장마다 재계산
+analysisYearMonth     = 사용자의 최근 거래월 (KST)                              # E-60
 
 quadrant              = evaluationStatus == PENDING ? null
                         : (burdenRatio ≥ Bx, adjustedSatisfaction ≥ By) 매트릭스     # 미결 #18
@@ -246,7 +256,7 @@ verdict               = evaluationStatus == PENDING ? null
 expectedSaving        = avgAmount × Suggestion.adjustCount
 ```
 
-> ⚠️ `k`(#15) · 롤업 기준(#16) · 보류 임계값(#17) · 축 경계 `Bx`/`By`(#18)는 **Spring `application.yml`의 `rules.*` 설정 파라미터**로 분리합니다 (07 §7).
+> ⚠️ `k`(#15) · 롤업 기준(#16) · 보류 임계값(#17) · 축 경계 `Bx`/`By`(#18)는 **Spring `application.yml`의 `rules.*` 설정 파라미터**로 분리합니다 (07 §7). **v2.2:** 잠정값 `3 · 3 · 3 · 0.1 · 0`을 기본값으로 주입했습니다 (E-57). 회고 저장 시 **사용자 전체 묶음**을 재계산합니다 (E-61).
 > 9/7 튜닝이 값 주입만으로 끝나야 합니다. `TAG_MATCH_MIN_SIMILARITY`·`EMBEDDING_MODEL`은 E-20으로 삭제되었습니다.
 
 ---
