@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v1.9 | **기준일:** 2026-09-03 | **Base URL:** `______`
+**버전:** v1.10 | **기준일:** 2026-09-07 | **Base URL:** `______`
 
+> **v1.10 변경 (계약 변경 — 07 §6 절차):** §2 `POST /auth/login`에 **`KAKAO` 본문 확정** — `code` · `redirectUri` 필드 신설 (01 E-51) / §0 오류 코드 `OAUTH_CODE_INVALID` · `OAUTH_PROVIDER_ERROR` 신설 / `GET /users/me`에 **`nickname` 신설**, `email`은 nullable (01 E-52)
+>
 > **v1.9 변경 (계약 변경 — 07 §6 절차):** §0 `timeSlot` **4종**(`MORNING`·`DAY`·`EVENING`·`NIGHT`) — `AFTERNOON` 폐기 (E-50) /
 > §2 `GET /retrospects/candidates`에 **`from`·`to` 쿼리 신설** — 채팅 3일 창과 날짜 지정 회고 (E-48) / §3 규칙 파라미터에 `rules.chat-window-days` 추가
 >
@@ -52,6 +54,8 @@
 | `FORBIDDEN` | 403 | 인증됐지만 권한 없음 (v1.5) |
 | `UNSUPPORTED_PROVIDER` | 400 | `POST /auth/login`의 `provider`가 아직 구현되지 않은 값 (v1.5) |
 | `DEMO_ACCOUNT_DISABLED` | 403 | `DEMO_ACCOUNT_ENABLED=false`인데 `LOCAL` 로그인 요청 (v1.5) |
+| `OAUTH_CODE_INVALID` | 400 | `POST /auth/login`의 카카오 인가 코드를 카카오가 거부 — 만료 · 재사용 · `redirectUri` 불일치 (v1.10 — E-51) |
+| `OAUTH_PROVIDER_ERROR` | 502 | 카카오 토큰 교환·프로필 조회 실패 · 타임아웃 → 클라이언트는 다시 시도 안내 (v1.10 — E-51) |
 | `NOT_IMPLEMENTED` | 501 | 뼈대만 있는 엔드포인트. 본선 중 임시 코드이며 시연 경로에는 남지 않아야 함 (v1.5) |
 
 ### 공통 enum
@@ -124,18 +128,29 @@
 
 ## 2. 상세 명세
 
-### `POST /auth/login` (v1.5 — 본문 명세 신설)
+### `POST /auth/login` (v1.5 — 본문 명세 신설 · v1.10 — `KAKAO` 본문 확정, E-51)
 
-**Request**
+**Request — 데모 계정**
 ```json
 { "provider": "LOCAL" }
 ```
 
+**Request — 카카오**
+```json
+{ "provider": "KAKAO", "code": "<카카오 인가 코드>", "redirectUri": "http://localhost:5173/auth/callback" }
+```
+
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `provider` | enum `authProvider` | ✅ | `LOCAL` = 데모 계정 폴백 (E-15). `KAKAO`는 OAuth2 Client 연결 후 활성화 — 그 전에는 400 `UNSUPPORTED_PROVIDER` |
+| `provider` | enum `authProvider` | ✅ | `LOCAL` = 데모 계정 폴백 (E-15). `KAKAO` = 카카오 로그인 (E-51). `NAVER` · `GOOGLE`은 400 `UNSUPPORTED_PROVIDER` |
+| `code` | string | `KAKAO`만 ✅ | 카카오가 클라이언트 콜백으로 돌려준 인가 코드. 1회용이며 수 분 안에 만료 |
+| `redirectUri` | string | `KAKAO`만 ✅ | 인가 요청에 썼던 클라이언트 콜백 URL. 서버 `KAKAO_REDIRECT_URIS` 목록에 없으면 400 `INVALID_INPUT` |
 
-**Response 200**
+**흐름 (E-51)** — 클라이언트가 `https://kauth.kakao.com/oauth/authorize?client_id=<REST API 키>&redirect_uri=<redirectUri>&response_type=code&state=<난수>`로 이동 → 카카오가 `redirectUri?code=...&state=...`로 돌려줌 → 클라이언트가 `state`를 대조하고 이 API를 호출 → 서버가 카카오와 토큰을 교환하고 프로필(`id` · `properties.nickname` · `kakao_account.email`)을 조회한 뒤 우리 JWT만 발급합니다. 카카오 첫 로그인이면 `users` 행을 만듭니다 — **별도 회원가입 API는 없습니다** (E-52). 카카오 액세스 토큰은 저장하지 않습니다.
+
+**오류** — `OAUTH_CODE_INVALID` 400 (카카오가 코드 거부) · `OAUTH_PROVIDER_ERROR` 502 (카카오 응답 실패·타임아웃) · `UNSUPPORTED_PROVIDER` 400 · `DEMO_ACCOUNT_DISABLED` 403 · `INVALID_INPUT` 400 (`KAKAO`인데 `code`·`redirectUri` 누락 또는 목록 밖)
+
+**Response 200** (두 provider 동일)
 ```json
 {
   "success": true,
@@ -162,6 +177,7 @@
   "data": {
     "id": 1,
     "email": "demo@sottaejap.kr",
+    "nickname": "데모 사용자",
     "authProvider": "LOCAL",
     "monthlyBudget": 1200000,
     "outlierThreshold": 1.5,
@@ -173,6 +189,8 @@
 ```
 
 > 클라이언트는 `onboardingCompleted == false`이면 **2-1 온보딩**, `true`이면 **3-1 홈**으로 진입합니다.
+> `email`은 v1.10부터 **nullable**입니다 (E-52) — 카카오 계정이 이메일 동의를 거부하면 `null`. 화면에서 이메일을 필수로 그리지 마십시오.
+> `nickname`은 v1.10 신설 (E-52) — 마이페이지 `1. 프로필`의 표시 이름. 카카오 닉네임을 저장하고, 데모 계정은 `데모 사용자`. nullable이며 `null`이면 클라이언트가 `사용자`로 표시합니다.
 > ⚠️ **갭 (v1.5):** `analysisYearMonth`는 04 `User` 엔티티에 없고 산출 규칙(최근 거래월? 사용자 설정?)이 미정입니다. 서버는 확정 전까지 `null`을 내려줍니다 — 액션시트에 결정 항목으로 올립니다.
 
 ---
