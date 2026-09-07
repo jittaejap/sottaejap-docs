@@ -2,7 +2,7 @@
 
 **버전:** v1.10 | **기준일:** 2026-09-07 | **담당:** 고현석
 
-> **v1.10 변경 (2026-09-07):** `User.email` **nullable** · 소셜 계정 식별은 **`(authProvider, providerUserId)` 유일 제약** · **`User.nickname` 신설** (01 E-52). 카카오 이메일은 선택 동의라 비어서 올 수 있고, 표시 이름은 닉네임이 맡습니다. server **`V3` 마이그레이션**이 필요합니다 — `users.email`의 `NOT NULL` 해제 · `users.nickname VARCHAR(100)` 추가(데모 계정은 `데모 사용자`로 채움). `(auth_provider, provider_user_id)` 부분 유일 인덱스는 **V1 `uq_users_provider`에 이미 있어** V3에서 만들지 않습니다 (9/7 확인). 카카오 로그인 흐름은 01 E-51.
+> **v1.10 변경 (2026-09-07):** `User.email` **nullable** · 소셜 계정 식별은 **`(authProvider, providerUserId)` 유일 제약** · **`User.nickname` 신설** (01 E-52). 카카오 이메일은 선택 동의라 비어서 올 수 있고, 표시 이름은 닉네임이 맡습니다. server **`V3` 마이그레이션**이 필요합니다 — `users.email`의 `NOT NULL` 해제 · **`uq_users_email` 유일 제약 삭제** · `users.nickname VARCHAR(100)` 추가(데모 계정은 `데모 사용자`로 채움). `(auth_provider, provider_user_id)` 부분 유일 인덱스는 **V1 `uq_users_provider`에 이미 있어** V3에서 만들지 않습니다 (9/7 확인). 카카오 로그인 흐름은 01 E-51.
 >
 > **v1.9 변경 (2026-09-03):** `Transaction.timeSlot` **4구간**으로 변경 (01 E-50). `AFTERNOON` 폐기 → `DAY`·`EVENING` 신설.
 > 스키마 소유자는 server이므로 **`V2` 마이그레이션이 필요합니다** — `time_slot`의 `CHECK` 제약과 **이미 저장된 `AFTERNOON` 값**을 함께 옮겨야 합니다 (06 R12).
@@ -46,7 +46,7 @@
 | 필드 | 타입 | 비고 |
 |---|---|---|
 | id | PK | |
-| email | string | **nullable** (v1.10 — E-52). 카카오가 이메일 동의를 안 주면 `null`. 이메일로 계정을 합치지 않는다 |
+| email | string | **nullable** (v1.10 — E-52). 카카오가 이메일 동의를 안 주면 `null`. 유일 제약 없음 — 이메일로 계정을 합치지도 막지도 않는다 |
 | nickname | string | v1.10 추가 — **표시 이름** (E-52). 카카오 `properties.nickname` 저장, 데모 계정은 V3 시드 `데모 사용자`. nullable — 비면 클라이언트가 `사용자`로 대체. 마이페이지 `1. 프로필`(03 S13)에 표시 |
 | authProvider | enum | v1.2 추가 — `LOCAL` / `KAKAO` / `NAVER` / `GOOGLE` (데모는 `LOCAL` 단일) |
 | providerUserId | string | v1.2 추가 — SNS 계정 식별자(카카오 `id`), nullable. **`(authProvider, providerUserId)` 유일** — `providerUserId IS NOT NULL`인 행에만 (V1 `uq_users_provider` · E-52) |
