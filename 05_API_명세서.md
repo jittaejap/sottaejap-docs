@@ -327,6 +327,8 @@
 
 **409 `DUPLICATE_RETROSPECT`** — 해당 `transactionId`에 이미 회고가 있는 경우 (ERD UNIQUE 제약).
 
+> **9/7 실측 (demo):** 같은 키 회고 1·2건째는 `PENDING` · `quadrant/verdict null` + 상위 묶음 `기타|NIGHT||` 생성, 3건째에 `RESOLVED` · `verdict` 산출, 같은 거래 재저장 409, `purpose: "야식"` 400 `INVALID_TAG`. 이름은 AI 폴백 문장(`○○배달`)이 그대로 `behaviorName`이 됐고, 이후 저장으로 사용자 평균이 바뀌면 이전 묶음의 `adjustedSatisfaction`도 다시 계산됩니다(E-61). **결과에서 빠진 묶음(자식이 롤업을 벗어난 상위 묶음)은 지우지 않고 값만 비웁니다** — 회고 수 0인 묶음은 지도·메모리에서 뺍니다.
+
 > 저장 시 **Spring 규칙 엔진**이 묶음·보정·판정을 재계산합니다 (v1.3 — E-18). HTTP 호출 없음.
 > 이름이 없는 새 묶음은 AI `POST /chat`(`task = CLUSTER_NAMING`)으로 `displayName`을 받습니다 (§3).
 > `purpose`·`companion`이 표준 태그 7/6종 밖이면 **400 `INVALID_TAG`** (E-20). `null`은 미확정으로 허용합니다.
@@ -374,12 +376,15 @@
 ```
 
 > `reflection`은 AI가 `tool_results[tool_name = "reflection"].data`로 돌려준 **후보값**입니다. 표준 태그 7/6종 밖 문자열은 서버가 `null`로 바꿉니다 (E-20). **사용자가 확인한 뒤 `POST /retrospects`로 저장**합니다.
-> `step`은 서버가 계산한 **다음 단계**입니다 — `uncertainFields`를 `satisfaction → purpose → companion → repeatIntent` 순으로 보고, 비어 있으면 `CONFIRM`.
+> `step`은 서버가 계산한 **다음 단계**입니다 — 응답 `reflection`에서 **아직 미확정인 첫 항목**(`satisfaction`이 `UNKNOWN` → `purpose` null → `companion` null → `repeatIntent` null) 순이고, 전부 확정이면 `CONFIRM`. AI가 폴백이라 아무것도 추출하지 못해도 남은 항목을 계속 묻습니다 (9/7 실측 정정 — `uncertainFields`만 보면 폴백에서 `CONFIRM`으로 건너뛰었습니다).
+> `uncertainFields`에는 AI의 `uncertain_fields`에 더해 **서버가 표준 태그 밖이라 버린 항목**도 들어갑니다. AI `data`에 키가 없는 항목은 요청의 확정값을 유지합니다.
 > `uncertainFields`는 AI의 `uncertain_fields`를 camelCase로 바꾼 것입니다 (`repeat_intention` → `repeatIntent`).
 > `reason_code`는 서버가 ⓪ 규칙(E-62)으로 구합니다. 어떤 규칙에도 맞지 않는 거래(직접 선택)는 `MANUAL_PICK`. `INTRO`의 `reply`가 선정 이유 설명입니다 (FR-04-10·11).
 > `task_context.status`는 항상 `ACTIVE`입니다. `PAUSED` 저장·재개(FR-04-12·13, `GET /retrospects/{id}`)는 P2.
 
 **503 `LLM_UNAVAILABLE`** — AI `/chat` 15초 초과·5xx. 클라이언트는 P0 선택지 버튼 모드로 전환합니다 (S11).
+
+> **9/7 실측 (demo · AI 컨테이너 키 없음):** `INTRO` → `reply`에 reasonCode 재구성 문장 + `step: SATISFACTION` + `fallback: true` 200. 폴백 모드는 `tool_results`가 비어 오므로 서버가 `reflection`의 남은 항목으로 `step`을 정합니다.
 
 ---
 
