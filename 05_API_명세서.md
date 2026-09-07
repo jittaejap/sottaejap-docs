@@ -524,7 +524,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 
 | 필드 | 규칙 |
 |---|---|
-| `task_context.task` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / **`CLUSTER_NAMING`** / **`ANALYSIS_NARRATE`** — 뒤 2종은 v1.3에서 문서가 정의, **v1.6 레포 반영 완료** (06 R4) |
+| `task_context.task` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / **`CLUSTER_NAMING`** / **`ANALYSIS_NARRATE`** / **`FINANCE_QA`** — `CLUSTER_NAMING`·`ANALYSIS_NARRATE`는 v1.3에서 문서가 정의, **v1.6 레포 반영 완료** (06 R4). `FINANCE_QA`는 v1.8 신설 (E-47) |
 | `task_context.status` | `ACTIVE` / `PAUSED` / `COMPLETED` — Spring이 소유. AI는 바꾸지 않는다 |
 | `task_context.state` | 작업별 구조화 상태 (아래 표). **레포는 `dict`로 받으므로 구조는 이 문서가 정본** |
 | `recent_messages` | 최소 최근 대화. 전체 이력을 보내지 않는다 (레포 원칙) |
