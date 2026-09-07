@@ -1,10 +1,28 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.3 | **기준일:** 2026-09-07 | **Base URL:** `______`
+**버전:** v2.6 | **기준일:** 2026-09-07 | **Base URL:** `______`
 
-> **v2.3 변경 (계약 변경 — 07 §6 절차):** §0 공통 enum `ctaType` · `suggestionStatus` **신설** (01 E-71 · E-72) / §2 `GET /satisfaction-map`이 `boundaries` **잠정값을 그대로 노출**하고 `cta`를 **3종**으로 채웁니다 (E-69 · E-71) / §2 `GET /analysis`에 집계 산식 · `highlight` 호출 경로 · **Spring 템플릿 폴백 3종** 명시 (E-68 · E-70) / §2 **8블록 신설** — `GET /behaviors` · `GET /behaviors/{id}` · `GET /goals` · `POST /goals` · `PUT /goals/{id}` · `DELETE /goals/{id}` · `GET /suggestions` · `POST /suggestions/{id}/adopt`·`/reject` (E-67 · E-72~E-74) / §3 내부 `analysis`는 **`highlight`가 없고**(E-70) `suggestions`는 실구현으로 바뀝니다, `ANALYSIS_NARRATE` `state`에 `analysis_year_month` 추가 · **`pending` 미전송** / §1 #17 `GET /reports/monthly`는 **다음 라운드** (E-75)
+> **v2.6 변경 (2026-09-07 — 제안 · 목표 슬라이스):** §0 공통 enum에 **`suggestionStatus`** 신설 (E-81) /
+> §2 **본문 명세 신설 6종** — `GET /goals`(#4) · `POST /goals`(#5) · `PUT /goals/{id}` · `DELETE /goals/{id}`(#5a) ·
+> `GET /suggestions`(#15) · `POST /suggestions/{id}/adopt|reject`(#16) /
+> §3 내부 AI `suggestions` 응답 확정 — 외부 `GET /suggestions`의 기본 목록과 같습니다.
+> 기존 응답이 바뀌지 않으므로 **계약 변경은 아닙니다**.
 >
-
+> **v2.5 변경 (계약 변경 — 07 §6 절차 · 분석 슬라이스):** §0 공통 enum에 **`ctaType`** 신설 (E-76) /
+> §2 `GET /satisfaction-map` — **`boundaries`가 더 이상 `null`이 아닙니다**(E-74, "null이면 축을 그리지 않는다" 폐기) ·
+> **CTA 3종**으로 확장(E-76, 03 §7 W-6 채택 — 종전 "PROTECT만"을 정정) · 처방 문구 5종 표 신설 /
+> §2 `GET /analysis` — `share` 분모가 **월 예산**임을 명시하고 `highlight` 폴백 경로 추가 (E-73 · E-75) /
+> §2 **본문 명세 신설 3종** — `GET /behaviors`(#12) · `GET /behaviors/{id}`(#13) · `PUT /users/me/settings`(#3) /
+> §3 내부 AI `analysis` 응답 확정 — **`highlight`를 싣지 않습니다** (E-75)
+>
+> **v2.4 변경 (2026-09-07 — 회고 알림 시각):** §2 `GET /notifications` — 알림 시각이 **후보 거래의 결제 시각에서 계산**되고
+> 스케줄이 30분마다 돕니다 (E-71). 경로 · DTO · enum은 그대로이므로 계약 변경이 아닙니다.
+>
+> **v2.3 변경 (2026-09-07 — 알림 전달 경로 · 대화 이력 · 내부 API 봉투):** §0 공통 enum에 **`reflectionStep`** 추가 (E-69) /
+> §1에 **Web Push 3종 신설**(#25·#26·#27 — E-68) / §2에 명세가 없던 **`#20 POST /notifications/{id}/read`** ·
+> **`#24 POST /chat/finance`** 본문 명세 신설 / §2 `GET /notifications`에 **목록 조회 시 생성** 동작 명시 (E-68) /
+> §3에 **내부 AI API 성공 응답은 항상 `data` object** 규칙 추가 (E-70) / 금융 Q&A 대화 이력은 서버가 소유 (E-67)
+>
 > **v2.2 변경 (계약 변경 — 07 §6 절차):** §2 `GET /retrospects/candidates`의 **`reason`은 Spring 템플릿**(01 E-62) — 회고된 거래 제외 · reasonCode 우선순위 · `limit` 상한 100 명시 / §2 **`POST /retrospects/chat` 본문 신설** (E-63) / §2 `POST /retrospects` 비고에 재계산 범위 · 리프 묶음 · 예산 없을 때 `null` (E-59 · E-61 · E-64) / §1 #9 `skip`은 알림 #20으로 갈음 (E-65) / §3 규칙 파라미터 **잠정값 주입** + `rules.candidate.*` · `rules.cluster.meal-categories` (E-57) / §3 내부 API 요청 본문은 필드 `@JsonProperty` (E-66)
 >
 
@@ -67,24 +85,23 @@
 | `OAUTH_PROVIDER_ERROR` | 502 | 카카오 토큰 교환·프로필 조회 실패 · 타임아웃 → 클라이언트는 다시 시도 안내 (v2.1 — E-55) |
 | `NOT_IMPLEMENTED` | 501 | 뼈대만 있는 엔드포인트. 본선 중 임시 코드이며 시연 경로에는 남지 않아야 함 (v1.5) |
 
-> **v2.3:** `/goals` 4종 · `/suggestions` 3종 · `/behaviors` 2종은 **새 오류 코드를 만들지 않습니다.** 검증 위반은 `INVALID_INPUT`, 없거나 남의 리소스는 `NOT_FOUND`를 그대로 씁니다 (E-67 · E-73 · E-74).
-
 ### 공통 enum
 
 | enum | 값 |
 |---|---|
 | `satisfaction` | **`HIGH` / `LOW` / `UNKNOWN`** — 3택, `MEDIUM` 없음 ⚠️ v1.3 변경 (E-23) |
-| `timeSlot` | `MORNING` / `DAY` / `EVENING` / `NIGHT` | ⚠️ v1.9 변경 (E-50) — `AFTERNOON` 폐기. 05~11 / 11~17 / 17~22 / 22~05 |
+| `timeSlot` | `MORNING` / `DAY` / `EVENING` / `NIGHT` — ⚠️ v1.9 변경 (E-50). `AFTERNOON` 폐기. 05~11 / 11~17 / 17~22 / 22~05 |
 | `quadrant` | `PROTECT` / `KEEP` / `MINOR` / `PRIORITY` — **좌표. 보류 시 `null`** ⚠️ v1.2 변경 |
 | `verdict` | **`SUSTAIN`(지켜요) / `ADJUST`(바꿔볼까요)** — 처방. **보류 시 `null`** ⚠️ v1.2 변경 |
 | `evaluationStatus` | **`RESOLVED` / `PENDING`** (v1.2 신설) |
 | `retrospectStatus` | **`ACTIVE`** / `PAUSED` / `COMPLETED` ⚠️ v1.3 변경 (E-24) |
 | `repeatIntent` | `true` / `false` / `null` — boolean nullable (v1.3 — E-24) |
 | `taskType` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / `CLUSTER_NAMING` / `ANALYSIS_NARRATE` / `FINANCE_QA` — AI `/chat` 전용 (v1.3, §3 · v1.8 — E-47) |
+| `reflectionStep` | `INTRO` / `SATISFACTION` / `PURPOSE` / `COMPANION` / `REPEAT` / `CONFIRM` — 회고 대화 단계. **화면이 소유** (v2.3 — E-69) |
+| `suggestionStatus` | **`PROPOSED` / `ADOPTED` / `REJECTED`** — `PROPOSED`는 재계산이 만드는 파생 행이고, 나머지 둘은 사용자가 정한 상태다 (v2.6 신설 — E-81) |
+| `ctaType` | **`RESERVE_BUDGET`(예산 확보하기) / `ADJUST`(조정하기)** — 묶음 상세 CTA. `KEEP`·보류는 `null` (v2.5 신설 — E-76) |
 | `notificationType` | `RETROSPECT_DUE` / `SUGGESTION` |
 | `authProvider` | `LOCAL` / `KAKAO` / `NAVER` / `GOOGLE` (v1.2) |
-| `ctaType` | **`RESERVE_BUDGET` / `ADJUST` / `null`** — 지도 상세 패널 CTA (v2.3 신설 — E-71) |
-| `suggestionStatus` | **`PROPOSED` / `ADOPTED` / `REJECTED`** (v2.3 신설 — E-72; server `V1__init.sql`의 CHECK와 같은 문자열) |
 
 > ⚠️ **v1.1 → v1.2 브레이킹 체인지 (2건)**
 > 1. `verdict.KEEP` → `SUSTAIN`, `verdict.CHANGE` → `ADJUST` — `quadrant.KEEP`(Ⅱ사분면)과 문자열이 같아
@@ -111,28 +128,31 @@
 | 1 | POST | `/auth/login` | 로그인 (SNS provider 지원) | FR-01-01 | 고현석 |
 | 2 | GET | `/users/me` | 내 정보 · 예산 · 임계값 · **온보딩 플래그** | FR-01-03, FR-09-03 | 고현석 |
 | 3 | PUT | `/users/me/settings` | 예산 · 임계값 · D+N 설정 | FR-01-03,04,06 | 고현석 |
-| 4 | GET | `/goals` | 목표 목록 · 달성률 **(v2.3 본문 신설 — E-74)** | FR-01-05 | 고현석 |
-| 5 | POST | `/goals` | 목표 등록 (`PUT /goals/{id}` 수정 포함) **(v2.3 본문 신설 — E-74)** | FR-01-02 | 고현석 |
-| **5a** | **DELETE** | **`/goals/{id}`** | **목표 삭제 (soft)** **(v2.3 본문 신설 — E-74)** | FR-01-02 | 고현석 |
+| 4 | GET | `/goals` | 목표 목록 · 달성률 | FR-01-05 | 고현석 |
+| 5 | POST | `/goals` | 목표 등록 (`PUT /goals/{id}` 수정 포함) | FR-01-02 | 고현석 |
+| **5a** | **DELETE** | **`/goals/{id}`** | **목표 삭제 (soft)** | FR-01-02 | 고현석 |
 | 6 | POST | `/transactions/upload` | 거래내역 업로드 | FR-02-01 | 고현석 |
 | 7 | GET | `/transactions` | 거래 목록 (필터·페이징, 회고 이력 겸용) | FR-02-02, FR-03-07 | 고현석 |
 | 8 | GET | `/retrospects/candidates` | 회고 후보 + 선정 근거 | FR-03 | 고현석 |
 | **9** | POST | **`/retrospects/candidates/{transactionId}/skip`** | 후보 제외 ⚠️ **경로 정정** — **v2.2: 엔드포인트를 두지 않는다.** 상태를 저장하지 않으므로(E-49) 알림 읽음 #20으로 갈음 (E-65) | FR-03-06 | 고현석 |
 | 10 | POST | `/retrospects` | 회고 응답 저장 | FR-04-14 | 고현석 |
 | 11 | POST | `/retrospects/chat` | 대화형 회고 턴 — Spring이 `task_context`를 만들어 AI `POST /chat`에 위임 (§3) | FR-04 | 고현석(프록시) · 오진호(AI) |
-| 12 | GET | `/behaviors` | 반복 행동 묶음 목록 **(v2.3 본문 신설 — E-67)** | FR-05 | 정민규 |
-| 13 | GET | `/behaviors/{id}` | 묶음 상세 **(v2.3 본문 신설 — E-67)** | FR-07-05 | 정민규 |
-| 14 | GET | `/satisfaction-map` | 만족도 지도 데이터 **(v2.3 본문 수정 — E-69 · E-71)** | FR-07-01 | 정민규 |
-| 15 | GET | `/suggestions` | 행동 조정안 **(v2.3 본문 신설 — E-72)** | FR-08-01 | 오진호 |
-| 16 | POST | `/suggestions/{id}/adopt` | 조정 횟수 선택 · 채택 (`/reject` 포함) **(v2.3 본문 신설 — E-73)** | FR-08-02~05 | 오진호 |
-| 17 | GET | `/reports/monthly` | 전월 대비 감소액 · 보조 지표 — **v2.3 범위 밖** — 전월 대비 정의 · 스냅샷 생성 시점 결정 후 (E-75) | FR-08-06,07 | 오진호 |
+| 12 | GET | `/behaviors` | 반복 행동 묶음 목록 | FR-05 | 정민규 |
+| 13 | GET | `/behaviors/{id}` | 묶음 상세 | FR-07-05 | 정민규 |
+| 14 | GET | `/satisfaction-map` | 만족도 지도 데이터 | FR-07-01 | 정민규 |
+| 15 | GET | `/suggestions` | 행동 조정안 | FR-08-01 | 오진호 |
+| 16 | POST | `/suggestions/{id}/adopt` | 조정 횟수 선택 · 채택 (`/reject` 포함) | FR-08-02~05 | 오진호 |
+| 17 | GET | `/reports/monthly` | 전월 대비 감소액 · 보조 지표 | FR-08-06,07 | 오진호 |
 | 18 | POST | `/onboarding/start` | 과거 거래 표본 연속 회고 | FR-09-01 | 오진호 |
 | 19 | GET | `/notifications` | 인앱 알림 목록 | FR-10-01,02 | 석정한 |
 | 20 | POST | `/notifications/{id}/read` | 알림 읽음 처리 | FR-10-02 | 석정한 |
 | **21** | **POST** | **`/onboarding/complete`** | **온보딩 완료 플래그 저장 + 초기 지도 생성** | FR-09-02 | 오진호 |
-| **22** | **GET** | **`/analysis`** | **소비 분석 (라벨별·카테고리별 요약 + 나만의 특징)** **(v2.3 본문 수정 — E-68 · E-70)** | FR-11 | 정민규·오진호 |
+| **22** | **GET** | **`/analysis`** | **소비 분석 (라벨별·카테고리별 요약 + 나만의 특징)** | FR-11 | 정민규·오진호 |
 | **23** | **GET** | **`/retrospects/{id}`** | **중단 회고 재개용 상태 조회** (P2) | FR-04-13 | 고현석 |
 | **24** | **POST** | **`/chat/finance`** | **금융 지식 Q&A** (P2, v1.3) — AI `POST /chat` + 금융 RAG 위임 | FR-12 | 오진호 |
+| **25** | **GET** | **`/notifications/push-key`** | **Web Push VAPID 공개키** (v2.3 — E-68) | FR-10 | 석정한 |
+| **26** | **POST** | **`/notifications/push-subscriptions`** | **Web Push 구독 등록** (v2.3 — E-68) | FR-10 | 석정한 |
+| **27** | **DELETE** | **`/notifications/push-subscriptions`** | **Web Push 구독 해지** (v2.3 — E-68) | FR-10 | 석정한 |
 
 > 외부 API는 모두 Spring이 제공합니다. 12~14·22는 **Spring 규칙 엔진**이 직접 산출한 값입니다 (v1.3 — E-18). **11·24만 AI `/chat`으로 위임**합니다.
 
@@ -205,91 +225,7 @@
 > 클라이언트는 `onboardingCompleted == false`이면 **2-1 온보딩**, `true`이면 **3-1 홈**으로 진입합니다.
 > `email`은 v2.1부터 **nullable**입니다 (E-56) — 카카오 계정이 이메일 동의를 거부하면 `null`. 화면에서 이메일을 필수로 그리지 마십시오.
 > `nickname`은 v2.1 신설 (E-56) — 마이페이지 `1. 프로필`의 표시 이름. 카카오 닉네임을 저장하고, 데모 계정은 `데모 사용자`. nullable이며 `null`이면 클라이언트가 `사용자`로 표시합니다.
-> ~~⚠️ **갭 (v1.5):** `analysisYearMonth`는 04 `User` 엔티티에 없고 산출 규칙이 미정입니다~~ → **v2.2 종결:** `analysisYearMonth`는 **사용자의 최근 거래월**입니다 (E-60, 06 R11 종결). `User` 엔티티 컬럼이 아니라 조회 시 계산합니다. **v2.3부터 `TransactionService.analysisYearMonth` 하나가 단일 산출점**이고, `/satisfaction-map` · `/analysis` · `/behaviors` · `/suggestions`가 모두 이 값을 씁니다 — 빈 묶음 행에 남아 있는 옛 값을 쓰지 않습니다 (E-75).
-
----
-
-### `GET /goals` (v2.3 신설 — E-74)
-
-**Response 200**
-```json
-{
-  "success": true,
-  "data": {
-    "goals": [{
-      "id": 3,
-      "name": "비상금",
-      "targetAmount": 1000000,
-      "currentAmount": 200000,
-      "adoptedSaving": 24000,
-      "achievementRate": 0.2,
-      "projectedRate": 0.224,
-      "createdAt": "2026-08-01T10:00:00+09:00"
-    }]
-  }
-}
-```
-
-> **삭제되지 않은 목표만**, `id` 오름차순입니다. 삭제는 soft delete(`deletedAt`)라 목록에서만 사라집니다.
-> `adoptedSaving` = 이 목표를 가리키는 **`ADOPTED` 제안의 `expectedSaving` 합**입니다 (예시: 심야 배달 제안 1건 채택, 12,000원 × 2회 = 24,000원).
-> `achievementRate = currentAmount ÷ targetAmount`, `projectedRate = (currentAmount + adoptedSaving) ÷ targetAmount`. 둘 다 **반올림하지 않은 double**이고 1을 넘을 수 있습니다. 예시 값은 읽기 좋게 줄여 적은 것입니다.
-> ⚠️ **채택은 `currentAmount`를 바꾸지 않습니다** (E-73). `currentAmount`는 사용자가 직접 적는 실적이고, 채택분은 `projectedRate`로만 보여 줍니다. 실적 반영은 월간 리포트 몫입니다 (#17 — 다음 라운드, E-75).
-
----
-
-### `POST /goals` (v2.3 신설 — E-74)
-
-**Request**
-```json
-{ "name": "비상금", "targetAmount": 1000000, "currentAmount": 200000 }
-```
-
-| 필드 | 규칙 |
-|---|---|
-| `name` | 필수. **1~50자**. 위반 시 400 `INVALID_INPUT` |
-| `targetAmount` | 필수. **1 이상**의 정수. 위반 시 400 `INVALID_INPUT` |
-| `currentAmount` | 생략 가능. **0 이상**의 정수, 생략하면 **0**. 음수는 400 `INVALID_INPUT` |
-
-**Response 200**
-```json
-{
-  "success": true,
-  "data": {
-    "id": 3,
-    "name": "비상금",
-    "targetAmount": 1000000,
-    "currentAmount": 200000,
-    "adoptedSaving": 0,
-    "achievementRate": 0.2,
-    "projectedRate": 0.2,
-    "createdAt": "2026-08-01T10:00:00+09:00"
-  }
-}
-```
-
-> `data`는 `GET /goals`의 목록 항목 **1개와 같은 모양**입니다. 방금 만든 목표를 가리키는 채택 제안은 없으므로 `adoptedSaving`은 **0**이고 `projectedRate`는 `achievementRate`와 같습니다.
-
----
-
-### `PUT /goals/{id}` (v2.3 신설 — E-74)
-
-**전체 교체입니다.** 본문·검증·응답이 `POST /goals`와 같고, 보낸 필드만 고치는 부분 수정이 아닙니다. `currentAmount`를 생략하면 **0으로 덮어씁니다.**
-
-**Response 200** — `POST /goals`와 같은 객체 (`adoptedSaving`은 현재 채택분 합)
-
-> 없는 목표 · 남의 목표 · 이미 삭제된 목표는 **404 `NOT_FOUND`**. 검증 위반은 **400 `INVALID_INPUT`**.
-
----
-
-### `DELETE /goals/{id}` (v2.3 신설 — E-74)
-
-**Response 200**
-```json
-{ "success": true }
-```
-
-> `data`가 **없습니다.** soft delete(`deletedAt`)이며, 삭제해도 그 목표를 가리키던 **`suggestions.goal_id`는 그대로 둡니다** — 채택 이력을 지우지 않습니다. 그래서 삭제된 목표의 `adoptedSaving`은 어디에도 다시 나타나지 않습니다.
-> 없는 목표 · 남의 목표 · 이미 삭제된 목표는 **404 `NOT_FOUND`**.
+> ⚠️ **갭 (v1.5):** `analysisYearMonth`는 04 `User` 엔티티에 없고 산출 규칙(최근 거래월? 사용자 설정?)이 미정입니다. 서버는 확정 전까지 `null`을 내려줍니다 — 액션시트에 결정 항목으로 올립니다.
 
 ---
 
@@ -479,97 +415,7 @@
 
 ---
 
-### `GET /behaviors` (v2.3 신설 — E-67)
-
-**Response 200**
-```json
-{
-  "success": true,
-  "data": {
-    "analysisYearMonth": "2026-08",
-    "behaviors": [{
-      "behaviorId": 12,
-      "name": "심야 배달",
-      "clusterKey": "배달|NIGHT|충동|혼자",
-      "parentId": null,
-      "retrospectCount": 4,
-      "adjustedSatisfaction": -0.42,
-      "monthlyTotalAmount": 96000,
-      "avgAmount": 12000,
-      "txCount": 8,
-      "burdenRatio": 0.08,
-      "evaluationStatus": "RESOLVED",
-      "quadrant": "PRIORITY",
-      "verdict": "ADJUST"
-    }, {
-      "behaviorId": 33,
-      "name": "편의점 간식",
-      "clusterKey": "편의점||휴식·취미|혼자",
-      "parentId": null,
-      "retrospectCount": 1,
-      "adjustedSatisfaction": -0.05,
-      "monthlyTotalAmount": 24000,
-      "avgAmount": 3000,
-      "txCount": 8,
-      "burdenRatio": 0.02,
-      "evaluationStatus": "PENDING",
-      "quadrant": null,
-      "verdict": null
-    }]
-  }
-}
-```
-
-> **유효 묶음(E-67)만** 싣습니다 — `retrospectCount > 0 AND parentId IS NULL`. 그래서 이 목록의 `parentId`는 **항상 `null`**입니다. 키를 지우지 않고 `null`로 내리는 이유는 상세(`GET /behaviors/{id}`)와 같은 모양을 쓰기 위해서입니다.
-> 롤업된 리프는 여기 나오지 않습니다. 상위 묶음이 그 금액·회수를 대신 갖고 있으므로 **지도·분석·제안과 이중 집계되지 않습니다.**
-> **정렬은 `GET /satisfaction-map`과 같습니다** — `ADJUST` → `SUSTAIN` → `PENDING`, 각 안에서 `burdenRatio` 내림차순(`null` 마지막) → `clusterKey` 오름차순.
-> `analysisYearMonth`는 `TransactionService.analysisYearMonth`(사용자의 최근 거래월 — E-60 · E-75) 하나에서 옵니다.
-> 회고를 한 번도 하지 않은 사용자는 `behaviors`가 **빈 배열**입니다. 404가 아닙니다.
-
----
-
-### `GET /behaviors/{id}` (v2.3 신설 — E-67)
-
-**Response 200**
-```json
-{
-  "success": true,
-  "data": {
-    "behaviorId": 12,
-    "name": "심야 배달",
-    "clusterKey": "배달|NIGHT|충동|혼자",
-    "parentId": null,
-    "retrospectCount": 4,
-    "adjustedSatisfaction": -0.42,
-    "monthlyTotalAmount": 96000,
-    "avgAmount": 12000,
-    "txCount": 8,
-    "burdenRatio": 0.08,
-    "evaluationStatus": "RESOLVED",
-    "quadrant": "PRIORITY",
-    "verdict": "ADJUST",
-    "prescription": "Hmm! 여기부터 볼까요? 부담은 큰데 만족은 낮았던 소비예요.",
-    "cta": { "type": "ADJUST", "label": "조정하기" },
-    "transactions": [{
-      "id": 1043,
-      "occurredAt": "2026-08-22T23:10:00+09:00",
-      "merchant": "○○배달",
-      "amount": 12000,
-      "category": "배달",
-      "timeSlot": "NIGHT"
-    }]
-  }
-}
-```
-
-> `GET /behaviors`의 항목에 **`prescription` · `cta` · `transactions`를 더한 모양**입니다. `prescription`·`cta` 규칙은 `GET /satisfaction-map`과 같습니다 (E-71).
-> **`transactions`는 `behavior_id`가 이 묶음이거나 그 자식 묶음인 거래 전부**입니다 — 롤업 상위를 열면 자식 리프의 거래도 함께 보입니다. **최신순**이고, 이번 달이 아니라 **전 기간**입니다(`monthlyTotalAmount`는 이번 달 합계라 두 값이 다를 수 있습니다).
-> **롤업된 리프도 열립니다.** `POST /retrospects`의 응답과 `transactions.behaviorId`가 **리프 id**라(E-59) 클라이언트가 리프 id로 들어오기 때문입니다. 이때만 `parentId`에 상위 묶음 id가 채워지고, 클라이언트는 그 id로 상위 묶음을 다시 열 수 있습니다.
-> **404 `NOT_FOUND`** — 없는 묶음 · 남의 묶음 · **`retrospectCount = 0`인 묶음**. 회고가 없는 묶음은 지도에도 분석에도 없으므로 상세도 열지 않습니다.
-
----
-
-### `GET /satisfaction-map` (v2.3 수정 — E-69 · E-71)
+### `GET /satisfaction-map`
 
 **Response 200**
 ```json
@@ -631,23 +477,30 @@
 }
 ```
 
-> **v2.3 (E-69):** `boundaries`는 §3 규칙 파라미터 `rules.axis-x-boundary` · `rules.axis-y-boundary`의 **잠정값을 그대로** 돌려줍니다 (`0.1` · `0`). ~~"`null`이면 클라이언트는 축을 그리지 않는다"~~ 규칙은 **폐기**했습니다 — 축은 항상 그립니다. 값을 튜닝하면 이 응답의 **숫자만** 바뀌고 계약은 그대로입니다 (06 #18).
-> `burdenRatio`는 **월 합계 ÷ 월 예산**입니다 (v1.2 — 96,000 ÷ 1,200,000 = 0.08 = 예산의 8%). `monthlyBudget`이 없으면 `burdenRatio`·`quadrant`가 `null`입니다 (E-61).
-> **v2.3 `cta` 3종 (E-71)** — ~~"`cta`는 `PROTECT`에만"~~ (E-12)을 03 §5-2 W-6에 맞춰 넓혔습니다.
->
-> | `quadrant` | `cta` |
-> |---|---|
-> | `PROTECT` | `{ "type": "RESERVE_BUDGET", "label": "예산 확보하기" }` |
-> | `MINOR` · `PRIORITY` | `{ "type": "ADJUST", "label": "조정하기" }` |
-> | `KEEP` · `evaluationStatus = PENDING` | `null` |
-> | `null` (예산이 없어 사분면을 못 냄, `RESOLVED`) | `null` — 단 `prescription`은 `verdict`로 고릅니다 (`SUSTAIN` → KEEP 문장 `"Awesome!!…"`, `ADJUST` → MINOR 문장 `"Umm…"`) |
->
-> **정렬 (E-67 · v1.2 클라이언트 분기 규칙과 같음):** `ADJUST` → `SUSTAIN` → `PENDING`, 각 안에서 `burdenRatio` 내림차순(`null` 마지막) → `clusterKey` 오름차순.
-> **유효 묶음만 싣습니다 (E-67):** `retrospectCount > 0 AND parentId IS NULL`. 롤업된 리프는 상위 묶음이 대신하므로 지도에 두 번 찍히지 않습니다.
+> **(v2.5 — E-74) `boundaries`는 `rules.axis-x-boundary` · `axis-y-boundary` 잠정값을 그대로 싣습니다** (기본 0.1 / 0).
+> "null이면 축을 그리지 않는다"는 v2.4까지의 계약이며 **폐기**했습니다. 값이 잠정이어도 축이 있는 편이 낫다는 판단입니다.
+> `burdenRatio`는 **월 합계 ÷ 월 예산**입니다 (v1.2 — 96,000 ÷ 1,200,000 = 0.08 = 예산의 8%).
+> **월 예산이 없으면** `burdenRatio` · `quadrant` · `cta`가 모두 `null`이고 `axisX.monthlyBudget`도 `null`입니다 (E-61).
+> 예산은 `PUT /users/me/settings`(#3)로 받습니다 — 받기 전에는 지도의 가로축이 서지 않습니다.
+> 거래가 하나도 없으면 `analysisYearMonth`가 `null`입니다 (E-60).
+
+**처방 문구 5종 · CTA 3종 (v2.5 — E-76 · FR-07-04 · FR-07-07)**
+
+| 상태 | `prescription` | `cta` |
+|---|---|---|
+| `PROTECT` | `Great! 이건 지킬 가치가 있어요. 예산을 미리 확보해둘까요?` | `{ RESERVE_BUDGET, "예산 확보하기" }` |
+| `KEEP` | `Awesome!! 부담 없이 만족스러운 소비예요. 이대로 두셔도 좋아요.` | `null` |
+| `MINOR` | `Umm… 만족은 낮았지만 부담은 크지 않아요. 급하게 바꾸지 않아도 돼요.` | `{ ADJUST, "조정하기" }` |
+| `PRIORITY` | `Hmm! 여기부터 볼까요? 부담은 큰데 만족은 낮았던 소비예요.` | `{ ADJUST, "조정하기" }` |
+| 보류(`PENDING`) | `아직 판단하기엔 이르네요. 조금 더 지켜볼게요.` | `null` |
+
+> **v2.5 정정:** 종전 "`cta`는 `PROTECT`에만 채워집니다 (E-12)"를 **3종으로 확장**했습니다 — 03 §7 W-6 채택 (E-76).
+> **예산이 없어 `quadrant`가 `null`인 RESOLVED 묶음**은 세로축 부호만 남으므로 처방을 판정으로 고릅니다 —
+> `SUSTAIN`이면 `KEEP` 문장, `ADJUST`면 `MINOR` 문장이고 `cta`는 `null`입니다.
 
 ---
 
-### `GET /analysis` (v1.2 신설 — FR-11 · v2.3 수정 — E-68 · E-70)
+### `GET /analysis` (v1.2 신설 — FR-11)
 
 **Response 200**
 ```json
@@ -674,160 +527,232 @@
 }
 ```
 
-> `byVerdict`·`byCategory` = **규칙 엔진 집계** (결정론적). 대상은 **유효 묶음**뿐입니다 — `retrospectCount > 0 AND parentId IS NULL` (E-67).
-> `byVerdict`는 **항상 `SUSTAIN` · `ADJUST` 2행**입니다 (v2.3 — E-68). 해당 판정 묶음이 하나도 없어도 행을 지우지 않고 `clusterCount: 0` · `monthlyTotalAmount: 0` · `share: 0.0`으로 내려보냅니다. 클라이언트는 두 행이 항상 있다고 가정해도 됩니다.
-> `pending`은 `evaluationStatus = PENDING`인 유효 묶음의 합입니다. `byVerdict`와 겹치지 않습니다.
->
-> **v2.3 집계 산식 (E-68 · 04 §3)**
->
-> | 필드 | 산식 |
-> |---|---|
-> | `share` (`byVerdict` · `pending` 공통) | `monthlyTotalAmount ÷ User.monthlyBudget`. 예시 역산 430,000 ÷ 1,200,000 = 0.3583… **예산이 없거나 0이면 `null`** |
-> | `byCategory[].category` | `clusterKey`의 **첫 자리**(카테고리) |
-> | `byCategory[].monthlyTotalAmount` | 그 카테고리 유효 묶음의 `monthlyTotalAmount` 합계 |
-> | `byCategory[].avgAmount` | `Σ monthlyTotalAmount ÷ Σ txCount` — **정수 내림**. `Σ txCount`가 0이면 `null` |
-> | `byCategory[].dominantTimeSlot` | 합계가 가장 큰 시간대. 동률이면 `timeSlot` 선언순 `MORNING → DAY → EVENING → NIGHT`. `clusterKey`의 시간대 자리가 전부 비면 `null` (E-58) |
-> | `byCategory[].verdict` | 합계가 가장 큰 **`RESOLVED`** 묶음의 `verdict`. `RESOLVED`가 하나도 없으면 `null`. **PENDING 묶음의 금액도 합계에는 포함**합니다 |
->
-> **정렬:** `monthlyTotalAmount` 내림차순 → `category` 오름차순. **합계가 0인 카테고리는 싣지 않습니다.**
-> **반올림하지 않습니다.** 위 예시의 `share`(`0.36` · `0.18` · `0.15`)와 `adjustedSatisfaction`은 **읽기 좋게 소수 둘째 자리로 줄여 적은 것**이고, 실제 응답은 나눗셈 결과를 그대로 싣습니다. 표시 자릿수는 클라이언트가 정합니다.
->
-> **v2.3 `highlight` 생성 경로 (E-70)**
->
+> `byVerdict`·`byCategory` = **규칙 엔진 집계** (결정론적).
 > `highlight` = AI가 위 수치를 **재구성한** 한 문장 — `POST /chat`(`task = ANALYSIS_NARRATE`, §3). 집계에 없는 값은 서술하지 않습니다 (FR-11-03 · NFR-02).
-> **호출 시점은 `GET /analysis` 요청 처리 중**입니다. 별도 배치·캐시가 없으므로 집계를 끝낸 Spring이 그 자리에서 AI를 부릅니다. `state`에는 `analysis_year_month` · `by_verdict[]` · `by_category[]`만 싣습니다 — **`pending`은 보내지 않습니다.** AI가 문장 속 숫자를 `by_verdict`·`by_category`의 값과 대조하는 허용목록 가드를 돌리기 때문에, 거기에 없는 `pending` 수치를 서술하면 그 문장은 어차피 버려집니다.
-> **다음 네 경우에는 Spring 템플릿 문장을 씁니다.** ① AI `/chat` 503(15초 초과·5xx) ② `reply`가 빈 문장 ③ 응답의 `fallback`이 `true` ④ 유효 묶음이 0개 — **이때는 AI를 아예 부르지 않습니다.**
->
-> | 조건 | 문장 |
-> |---|---|
-> | `byCategory`에 `verdict = ADJUST`인 행이 있음 (첫 행 기준) | `"이번 달은 {category}에 {monthlyTotalAmount}원을 썼고, 돌아보니 아쉬움이 남는 소비였어요."` |
-> | 유효 묶음은 있으나 `ADJUST` 카테고리가 없음 | `"이번 달 회고한 소비 중 조정이 필요한 곳은 아직 없어요."` |
-> | 유효 묶음 0개 | `"아직 회고한 소비가 없어요. 소비를 돌아보면 나만의 특징을 찾아드릴게요."` |
->
-> 금액은 **천 단위 구분**으로 넣습니다(`96,000원`) — AI `fallback.py` INTRO의 `{amount:,}원`과 같은 서식입니다.
->
-> `GET /analysis`는 **항상 200**입니다. AI가 죽어도 `LLM_UNAVAILABLE`을 내지 않고 위 문장으로 채웁니다.
-> AI 호출 15초가 이 GET의 응답 시간에 더해질 수 있음을 **허용합니다.** 대신 **AI를 부르는 동안 DB 트랜잭션을 열어 두지 않습니다** (E-64와 같은 원칙) — 집계를 읽는 트랜잭션을 닫은 뒤 AI를 부릅니다.
-> 내부 AI API(§3 `get_behavior_analysis`)의 `analysis` 응답에는 **`highlight`가 없습니다.** AI가 자기 문장을 다시 읽는 경로를 만들지 않습니다.
+
+**집계 산식 (v2.5 — E-73)**
+
+| 필드 | 산식 |
+|---|---|
+| 대상 묶음 | `retrospectCount > 0 && parentId == null` — **유효 묶음** (E-72). 롤업된 리프는 상위 묶음이 대신하므로 뺍니다(이중 집계 방지) |
+| `share` | **`monthlyTotalAmount ÷ User.monthlyBudget`** — 분모는 월 예산입니다. 예산이 없으면 `null`이고 반올림하지 않습니다 |
+| `byVerdict` | 항상 **`SUSTAIN` · `ADJUST` 2행**입니다. 해당 묶음이 없어도 0으로 채운 행을 냅니다 |
+| `pending` | `evaluationStatus = PENDING` 유효 묶음의 합. `verdict`가 `null`이라 `byVerdict`에 넣을 수 없습니다 |
+| `byCategory.category` | 묶음 키 `카테고리\|시간대\|목적\|동행인`의 첫 자리 (E-58 · E-59) |
+| `byCategory.avgAmount` | `Σ monthlyTotalAmount ÷ Σ txCount` (정수). 건수가 0이면 `null` |
+| `byCategory.dominantTimeSlot` | 월 합계가 가장 큰 시간대. 동률이면 이른 시간대. 키에 시간대가 없는 카테고리는 `null` (E-58) |
+| `byCategory.verdict` | 월 합계가 가장 큰 **RESOLVED** 묶음의 판정. 전부 보류면 `null`. **보류 금액도 카테고리 합계에는 들어갑니다** |
+| 정렬 · 제외 | 합계 내림차순 → `category` 오름차순. 합계 0인 카테고리는 뺍니다 |
+
+> **`highlight` 폴백 (v2.5 — E-75).** 이 GET이 그 자리에서 `ANALYSIS_NARRATE`를 호출하므로 AI 왕복(최대 15초)이
+> 응답 시간에 포함됩니다. **다만 어떤 경우에도 200입니다** — AI가 503이거나 빈 문장이거나 `fallback: true`를 주면
+> Spring 템플릿 문장으로 갈음하고, 유효 묶음이 0개면 AI를 아예 부르지 않습니다.
+> AI에 보내는 `state`에는 `analysis_year_month` · `by_verdict[]` · `by_category[]`만 싣습니다 — **`pending`은 보내지 않습니다**
+> (판정이 없는 금액을 문장에 쓸 근거로 주지 않기 위한 가드).
 
 ---
 
-### `GET /suggestions` (v2.3 신설 — E-72)
+### `GET /behaviors` (v2.5 신설 — #12 · FR-05)
 
-**Query** — `?status=PROPOSED|ADOPTED|REJECTED` (생략 가능)
+지도와 **같은 데이터를 목록으로** 봅니다. 대상과 정렬이 `GET /satisfaction-map`과 같습니다 — 유효 묶음(E-72)을
+`ADJUST` → `SUSTAIN` → 보류 순, 각 안에서 `burdenRatio` 내림차순(모르면 맨 뒤), 같으면 묶음 키 순으로 냅니다.
 
 **Response 200**
 ```json
 {
   "success": true,
   "data": {
-    "analysisYearMonth": "2026-08",
-    "suggestions": [{
-      "id": 7,
+    "behaviors": [{
       "behaviorId": 12,
-      "behaviorName": "심야 배달",
-      "quadrant": "PRIORITY",
-      "verdict": "ADJUST",
-      "burdenRatio": 0.08,
+      "name": "심야 배달",
+      "clusterKey": "배달|NIGHT|충동|혼자",
+      "parentId": null,
+      "monthlyTotalAmount": 96000,
       "avgAmount": 12000,
       "txCount": 8,
-      "adjustCount": 8,
-      "expectedSaving": 96000,
-      "goalId": null,
-      "status": "PROPOSED",
-      "reason": "이번 달 8회, 평균 12,000원. 부담은 큰데 만족은 낮았던 소비라 먼저 살펴볼 만해요.",
-      "createdAt": "2026-08-25T20:30:00+09:00"
+      "retrospectCount": 4,
+      "burdenRatio": 0.096,
+      "adjustedSatisfaction": -0.42,
+      "evaluationStatus": "RESOLVED",
+      "quadrant": "MINOR",
+      "verdict": "ADJUST"
     }]
   }
 }
 ```
 
-> **`status`를 생략하면 `PROPOSED` + `ADOPTED`**입니다 — `REJECTED`는 빠집니다. 값을 주면 그 상태만 돌려줍니다. **enum 밖 문자열은 400 `INVALID_INPUT`** (`suggestionStatus` — §0).
-> **제안은 만들어지는 게 아니라 재계산에서 파생됩니다 (E-72).** 회고 저장(`POST /retrospects`)의 재계산(`recomputeAll`) **끝에서 동기화**합니다. 별도 생성 엔드포인트는 없습니다.
->
-> | 항목 | 규칙 |
-> |---|---|
-> | 대상 | **유효 묶음(E-67) ∧ `evaluationStatus = RESOLVED` ∧ `verdict = ADJUST` ∧ `avgAmount ≠ null`** — 롤업 상위 묶음 · `MINOR` · 예산이 없어 `quadrant = null`인 묶음도 **모두 포함**합니다 |
-> | 초기값 | 대상 묶음마다 `PROPOSED` **1행**. `adjustCount = txCount`, `expectedSaving = avgAmount × adjustCount` |
-> | 재계산 | 대상이면 **제자리 갱신**(`avgAmount`·`txCount`·`adjustCount`·`expectedSaving`·`reason`), 대상에서 빠진 `PROPOSED`는 **삭제** |
-> | `ADOPTED` · `REJECTED` | **보존 · 불변** — "채택 당시 값"입니다. 그 묶음에 새 `PROPOSED`를 만들지 않습니다(재제안은 P2) |
->
-> **정렬:** `quadrant` `PRIORITY` → `MINOR` → `null`, 각 안에서 `burdenRatio` 내림차순(`null` 마지막) → `id` 오름차순.
-> `behaviorName`이 아직 없으면(AI `CLUSTER_NAMING` 실패) 템플릿 이름 `"{시간대 라벨} {카테고리}"`를 그대로 씁니다 (E-64).
-> **`reason`은 Spring 템플릿 3종**(`quadrant` 기준)입니다. AI가 만든 문장이 아닙니다.
->
-> | `quadrant` | `reason` |
-> |---|---|
-> | `PRIORITY` | `"이번 달 {txCount}회, 평균 {avgAmount}원. 부담은 큰데 만족은 낮았던 소비라 먼저 살펴볼 만해요."` |
-> | `MINOR` | `"이번 달 {txCount}회, 평균 {avgAmount}원. 부담은 적지만 아쉬움이 남았던 소비예요. 여력이 될 때 조정해도 괜찮아요."` |
-> | `null` (예산 없음) | `"이번 달 {txCount}회, 평균 {avgAmount}원. 아쉬움이 남았던 소비예요. 월 예산을 설정하면 부담도 함께 볼 수 있어요."` |
->
-> 금액은 **천 단위 구분**으로 넣습니다(`12,000원`) — `highlight` 템플릿과 같은 서식입니다.
->
-> AI `POST /chat`(`task = ACTION_PLAN`)은 이 목록에서 `suggestion_ids[]`로 고른 제안의 이유를 **다시 말해 주는** 경로입니다 (FR-08-01). **저장되는 `reason`은 위 템플릿**이고, AI 문장으로 덮어쓰지 않습니다.
+> `name`은 AI가 지은 이름이고(⑤ · E-64), 아직 붙지 않았으면 묶음 키에서 만든 템플릿 이름으로 대체합니다.
 
 ---
 
-### `POST /suggestions/{id}/adopt` (v2.3 신설 — E-73)
+### `GET /behaviors/{id}` (v2.5 신설 — #13 · FR-07-05)
 
-**Request**
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "behavior": { "behaviorId": 12, "name": "심야 배달", "clusterKey": "배달|NIGHT|충동|혼자", "parentId": null,
+                  "monthlyTotalAmount": 96000, "avgAmount": 12000, "txCount": 8, "retrospectCount": 4,
+                  "burdenRatio": 0.096, "adjustedSatisfaction": -0.42,
+                  "evaluationStatus": "RESOLVED", "quadrant": "MINOR", "verdict": "ADJUST" },
+    "transactions": [
+      { "id": 1043, "occurredAt": "2026-08-24T23:30:00+09:00", "merchant": "배달의민족",
+        "amount": 12000, "category": "배달", "timeSlot": "NIGHT", "behaviorId": 12 }
+    ]
+  }
+}
+```
+
+> **목록과 달리 롤업된 리프도 열어 줍니다** (E-72). `POST /retrospects` 응답이 **리프** 묶음 id를 주는데
+> 그 리프가 롤업됐다면 지도에는 상위 묶음만 있기 때문입니다 — 대신 `parentId`를 함께 주어 지도의 어느 점인지
+> 알 수 있게 합니다. 회고 수가 0인 묶음과 남의 묶음은 구별하지 않고 둘 다 **404 `NOT_FOUND`**입니다.
+> `transactions`는 **이 묶음과 자식 리프에 배정된 거래의 합집합**입니다 — 상위 묶음에는 직접 구성원만 배정돼
+> 있어(E-59) 자식을 함께 읽지 않으면 상세가 비어 보입니다. 시각은 `+09:00` 표기입니다.
+
+---
+
+### `GET /suggestions` (v2.6 본문 신설 — #15 · FR-08-01)
+
+`?status=PROPOSED|ADOPTED|REJECTED` 로 거를 수 있습니다. **생략하면 `PROPOSED`와 `ADOPTED`만** 내려갑니다 —
+거절한 제안이 기본 목록에 다시 보이면 거절이 의미가 없습니다. 잘못된 값은 400 `INVALID_INPUT`입니다.
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "suggestions": [{
+      "id": 7,
+      "behaviorId": 12,
+      "behaviorName": "심야 배달",
+      "monthlyTotalAmount": 96000,
+      "avgAmount": 12000,
+      "txCount": 8,
+      "adjustedSatisfaction": -0.42,
+      "quadrant": "PRIORITY",
+      "adjustCount": 8,
+      "expectedSaving": 96000,
+      "goalId": null,
+      "status": "PROPOSED",
+      "reason": "심야 배달은 이번 달 96,000원을 썼고 만족도가 낮았어요. 횟수를 줄여볼까요?"
+    }]
+  }
+}
+```
+
+> **(E-81) 제안은 재계산 파생 행입니다.** 회고를 저장할 때마다 도는 재계산이 대상 묶음마다 `PROPOSED` 1행을
+> 두고 제자리 갱신하며, 대상에서 빠지면 그 `PROPOSED`를 지웁니다. 별도 생성 API가 없는 이유입니다.
+> 대상은 **유효 묶음(E-72) ∧ `RESOLVED` ∧ `ADJUST` ∧ `avgAmount != null`** — 상위 묶음 · `MINOR` ·
+> 예산이 없어 `quadrant`가 null인 것도 들어가고, `PROTECT`는 들어가지 않습니다.
+> 정렬은 `PRIORITY` → `MINOR` → null, 각 안에서 `burdenRatio` 내림차순(모르면 마지막), `id` 오름차순입니다.
+> `adjustCount`는 제안 시점에 `txCount`이고 채택할 때 사용자가 고칩니다.
+> `reason`은 **Spring 템플릿 3종**입니다 — AI를 부르지 않으므로 `ai` 컨테이너가 내려가도 목록이 그대로 뜹니다 (E-38 · E-84).
+
+---
+
+### `POST /suggestions/{id}/adopt` · `POST /suggestions/{id}/reject` (v2.6 본문 신설 — #16 · FR-08-02~05)
+
+**Request** (adopt)
 ```json
 { "adjustCount": 2, "goalId": 3 }
 ```
 
 | 필드 | 규칙 |
 |---|---|
-| `adjustCount` | 필수. **`1 ≤ adjustCount ≤ txCount`**. 범위 밖은 400 `INVALID_INPUT` |
-| `goalId` | 필수. **내 목표 · 삭제되지 않은 목표**여야 합니다. 아니면 404 `NOT_FOUND` |
+| `adjustCount` | `1 ≤ n ≤ txCount`. 벗어나면 400 `INVALID_INPUT` |
+| `goalId` | 내 목표이고 삭제되지 않았어야 합니다. 아니면 404 `NOT_FOUND`. 생략 가능(목표에 배분하지 않고 채택만) |
 
-**Response 200**
+`reject`는 본문이 없습니다.
+
+**Response 200** — 갱신된 제안 한 건 (`GET /suggestions` 항목과 같은 모양)
+
+**상태 전이 (E-82)**
+
+| 지금 | adopt | reject |
+|---|---|---|
+| `PROPOSED` | → `ADOPTED` | → `REJECTED` |
+| `ADOPTED` | → `ADOPTED` (횟수·목표 수정 — FR-08-05) | → `REJECTED` (철회) |
+| `REJECTED` | 400 `INVALID_INPUT` | 400 `INVALID_INPUT` |
+
+> `expectedSaving = avgAmount × adjustCount`를 채택 시점에 계산해 **굳힙니다.** 이후 재계산이 평균 단가를
+> 바꿔도 채택한 금액은 그대로입니다 — 사용자가 본 숫자와 달라지지 않아야 합니다 (E-81).
+> **채택은 `Goal.currentAmount`를 바꾸지 않습니다** (E-82). 채택은 '예상'이고 `currentAmount`는 '실적'입니다.
+> 없는 제안과 남의 제안은 구별하지 않고 둘 다 404입니다.
+
+---
+
+### `GET /goals` · `POST /goals` · `PUT /goals/{id}` · `DELETE /goals/{id}` (v2.6 본문 신설 — #4 · #5 · #5a · FR-01-02,05 · FR-08-04)
+
+**`GET /goals` — Response 200**
 ```json
 {
   "success": true,
   "data": {
-    "id": 7,
-    "behaviorId": 12,
-    "behaviorName": "심야 배달",
-    "quadrant": "PRIORITY",
-    "verdict": "ADJUST",
-    "burdenRatio": 0.08,
-    "avgAmount": 12000,
-    "txCount": 8,
-    "adjustCount": 2,
-    "expectedSaving": 24000,
-    "goalId": 3,
-    "status": "ADOPTED",
-    "reason": "이번 달 8회, 평균 12,000원. 부담은 큰데 만족은 낮았던 소비라 먼저 살펴볼 만해요.",
-    "createdAt": "2026-08-25T20:30:00+09:00"
+    "goals": [{
+      "id": 3,
+      "name": "여행 자금",
+      "targetAmount": 1000000,
+      "currentAmount": 0,
+      "adoptedSaving": 24000,
+      "achievementRate": 0.0,
+      "projectedRate": 0.024
+    }]
   }
 }
 ```
 
-> `expectedSaving`을 **`avgAmount × adjustCount`로 다시 계산**합니다 (12,000 × 2 = 24,000).
-> **채택은 `Goal.currentAmount`를 바꾸지 않습니다.** `goalId`를 달아 두면 `GET /goals`의 `adoptedSaving`·`projectedRate`에 반영됩니다 (E-74). 실적 반영은 월간 리포트 몫입니다 (#17 — 다음 라운드).
-> 채택한 제안은 그 뒤 재계산에서 **값이 바뀌지 않습니다** — 묶음의 `avgAmount`가 달라져도 "채택 당시 값"으로 남습니다 (E-72).
->
-> **상태 전이 (E-73)**
->
-> | 현재 `status` | `/adopt` | `/reject` |
-> |---|---|---|
-> | `PROPOSED` | → `ADOPTED` | → `REJECTED` |
-> | `ADOPTED` | → `ADOPTED` — **횟수 · 목표 수정** (FR-08-05) | → `REJECTED` — **채택 철회** |
-> | `REJECTED` | **400 `INVALID_INPUT`** (종단 상태) | **400 `INVALID_INPUT`** (종단 상태) |
->
-> **404 `NOT_FOUND`** — 없는 제안 · 남의 제안 · 없는 목표 · 남의 목표 · 삭제된 목표.
+| 필드 | 산식 (E-83) |
+|---|---|
+| `adoptedSaving` | 이 목표에 붙은 `ADOPTED` 제안의 `expectedSaving` 합 |
+| `achievementRate` | `currentAmount ÷ targetAmount` |
+| `projectedRate` | `(currentAmount + adoptedSaving) ÷ targetAmount` |
+
+> 비율은 **raw double**입니다 — 반올림은 화면이 합니다. `targetAmount ≤ 0`이면 둘 다 `null`입니다.
+> **`achievementRate`는 당분간 0입니다** — 채택이 `currentAmount`를 바꾸지 않기 때문입니다 (E-82).
+> 실적 반영 시점은 월간 리포트 판에서 정합니다. 그때까지 화면이 보여줄 수 있는 것은 `projectedRate`입니다.
+
+**`POST /goals` · `PUT /goals/{id}` — Request**
+```json
+{ "name": "여행 자금", "targetAmount": 1000000, "currentAmount": 0 }
+```
+
+| 필드 | 규칙 |
+|---|---|
+| `name` | 1~50자 |
+| `targetAmount` | 1 이상 |
+| `currentAmount` | 0 이상. 생략하면 0 |
+
+어기면 400 `INVALID_INPUT`, 남의 목표·없는 목표는 404 `NOT_FOUND`입니다.
+
+**`DELETE /goals/{id}`** — soft delete(`deletedAt`)입니다. 목록에서 빠지지만 **`suggestions.goal_id`는 그대로 둡니다** —
+지운 목표에 붙어 있던 채택 이력을 잃지 않기 위해서입니다 (E-83). 응답은 `{ "success": true }`입니다.
 
 ---
 
-### `POST /suggestions/{id}/reject` (v2.3 신설 — E-73)
+### `PUT /users/me/settings` (v2.5 본문 신설 — #3 · FR-01-03,04,06)
 
-**Request 본문 없음**
+온보딩 2단계와 마이페이지(S13)가 같은 본문을 씁니다.
 
-**Response 200** — `/adopt`와 같은 제안 객체 (`status: "REJECTED"`)
+**Request**
+```json
+{ "monthlyBudget": 1000000, "outlierThreshold": 2.0, "retrospectDelayDays": 1 }
+```
 
-> `adjustCount` · `expectedSaving` · `goalId`는 **그대로 둡니다.** 철회 이력이 남습니다.
-> `REJECTED`는 **종단 상태**입니다. 다시 `/adopt`·`/reject`를 부르면 400 `INVALID_INPUT`이고, 재계산도 이 행을 건드리지 않으며 같은 묶음에 새 `PROPOSED`를 만들지 않습니다(재제안은 P2 — E-72).
-> **404 `NOT_FOUND`** — 없는 제안 · 남의 제안.
+| 필드 | 규칙 |
+|---|---|
+| `monthlyBudget` | 1 이상. **지출 부담의 분모**입니다 (FR-06-06) — 이 값이 없으면 지도의 가로축이 서지 않습니다 |
+| `outlierThreshold` | 0 초과. 이상치 민감도 배수 (E-46) |
+| `retrospectDelayDays` | 0~30. 회고 알림까지 기다리는 날 수 (D+N) |
+
+> 세 값 모두 선택이고 **`null`은 "그대로 두기"** 입니다. 다만 셋이 전부 비면 **400 `INVALID_INPUT`** 입니다 —
+> 필드 이름을 잘못 보낸 요청이 200으로 조용히 아무것도 안 하는 것보다 드러나는 편이 낫습니다.
+> 범위를 벗어난 값도 400입니다.
+>
+> **`monthlyBudget`이 바뀌면 서버가 묶음을 다시 계산합니다.** `burdenRatio`·`quadrant`는 재계산이 묶음 행에
+> 써 둔 값이라, 예산만 고치면 지도의 가로축과 처방·CTA가 옛 예산 기준으로 남습니다.
+
+**Response 200** — `GET /users/me`와 같은 객체입니다.
 
 ---
 
@@ -863,13 +788,116 @@
       "id": 3,
       "type": "RETROSPECT_DUE",
       "refId": 1043,
-      "message": "어제의 심야 배달, 어땠는지 돌아볼까요?",
+      "message": "어제 이맘때 ○○배달 12,000원, 어땠는지 돌아볼까요?",
       "isRead": false,
-      "createdAt": "2026-08-24T09:00:00+09:00"
+      "createdAt": "2026-08-24T21:00:00+09:00"
     }]
   }
 }
 ```
+
+> **(v2.3 — E-68)** 이 목록을 여는 순간, 그날의 `RETROSPECT_DUE` 알림이 아직 없으면 **1건을 만듭니다.**
+> 알림 생성의 본류는 `NOTIFICATION_DAILY_CRON`(기본 30분마다)에 도는 스케줄이고, 이 동작은
+> 스케줄이 돌지 않았거나 그 사이 가입한 사용자를 위한 그물입니다. 어느 쪽이든 **하루 1건 가드**를
+> 지나야 만들어지므로 겹쳐도 두 번 생기지 않습니다 (FR-03-03).
+> `message`는 **Spring 템플릿**입니다 — AI를 부르지 않으므로 `ai` 컨테이너가 내려가도 알림은 뜹니다 (E-38).
+>
+> **(v2.4 — E-71)** 알림 시각은 사용자마다 다릅니다 — **후보 거래의 결제 시각 − 1시간**을 `07:00~21:00`으로
+> 자르고 30분 격자에 내린 값입니다. 새벽 1시 결제는 07:00, 22시 결제는 21:00에 갑니다. 스케줄은 30분마다
+> 돌며 지금이 그 시각인 사용자만 고릅니다. **그물 경로는 목표 시각이 지난 뒤에만** 만듭니다 — 오전에
+> 목록을 열었다고 저녁 알림을 미리 소진하면 정작 그 시각에는 하루 1건 가드에 걸립니다.
+> `message`의 "이맘때"가 사실인 이유도 이것입니다. 후보 거래는 `GET /retrospects/candidates`와
+> **같은 규칙 엔진 ⓪**이 고릅니다 (E-62).
+
+---
+
+### `POST /notifications/{id}/read` (v2.2 — 본문 명세 신설)
+
+**Response 200**
+```json
+{ "success": true }
+```
+
+**404 `NOT_FOUND`** — 없는 알림이거나 **다른 사용자의 알림**일 때. 존재 여부를 알려주지 않습니다.
+
+> 읽음 처리가 곧 후보 제외(`skip`)입니다 — 별도 상태를 저장하지 않습니다 (E-49).
+> 사용자는 같은 거래를 채팅·거래내역에서 다시 회고할 수 있어야 하기 때문입니다.
+
+---
+
+### Web Push 3종 (v2.3 신설 — E-68)
+
+브라우저는 **HTTPS에서만** Push를 허용합니다(`localhost`만 예외). iOS Safari는 사용자가 **홈 화면에
+추가한 PWA**에서만 동작합니다. 서버에 VAPID 키가 없으면 Web Push만 꺼지고 인앱 알림은 그대로입니다.
+
+#### `GET /notifications/push-key`
+
+```json
+{ "success": true, "data": { "enabled": true, "publicKey": "BEl6…(87자 base64url)" } }
+```
+
+| 필드 | 규칙 |
+|---|---|
+| `enabled` | `false`면 서버에 VAPID 키가 없다는 뜻입니다. **클라이언트는 구독을 시도하지 말고 인앱 알림만 씁니다** |
+| `publicKey` | `pushManager.subscribe`의 `applicationServerKey`. `enabled: false`면 빈 문자열입니다 |
+
+#### `POST /notifications/push-subscriptions`
+
+**Request** — 브라우저 `PushSubscription.toJSON()`을 **그대로** 보냅니다. `expirationTime`은 쓰지 않습니다.
+```json
+{
+  "endpoint": "https://updates.push.services.mozilla.com/wpush/v2/…",
+  "keys": { "p256dh": "BN…", "auth": "k9…" }
+}
+```
+
+**Response 200** — `{ "success": true }`
+
+> 같은 `endpoint`로 다시 등록하면 **행이 늘지 않고 키만 갱신**됩니다. 브라우저가 키를 새로 만들어
+> 재구독하는 일이 흔하기 때문입니다.
+
+#### `DELETE /notifications/push-subscriptions?endpoint=…`
+
+**Response 200** — `{ "success": true }`. 없는 구독을 지워도 성공입니다(여러 번 눌러도 결과가 같아야 합니다).
+
+> 구독이 폐기되면(브라우저 재설치·장기 미사용) 푸시 서비스가 404·410을 돌려주고 **서버가 그 행을
+> 스스로 지웁니다.** 클라이언트는 `pushsubscriptionchange`에서 다시 구독해 등록하면 됩니다.
+
+**서버가 보내는 푸시 본문** — service worker가 받는 것은 이 세 개뿐입니다.
+```json
+{ "title": "소때잡", "body": "9월 6일 ○○배달 12,000원, 어땠는지 돌아볼까요?", "url": "/notifications?ref=1043" }
+```
+
+---
+
+### `POST /chat/finance` (v2.2 — 본문 명세 신설 · P2)
+
+**Request**
+```json
+{ "message": "연금저축 세액공제가 뭐예요?" }
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `message` | string | ✅ | 질문. 공백만 보내면 400 `INVALID_INPUT`입니다 |
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "reply": "연금저축 상품에 가입하고 납입한 금액에 대해 세액을 공제받을 수 있는 제도예요. …",
+    "fallback": false
+  }
+}
+```
+
+- **출처는 별도 필드로 두지 않습니다** — `reply` 문장 안에서 느슨하게 언급합니다 (E-47).
+- 근거를 찾지 못하면 지어내지 않고 **"확인할 수 없어요"** 라고 답하는 것이 정상입니다 (FR-12-02).
+- 이전 질문의 맥락은 서버가 들고 있으므로 "그럼 한도는요?" 같은 되물음이 그대로 이어집니다 (E-67).
+- 원금 손실 위험 상품 추천과 개인화된 투자 권유는 답하지 않습니다 (FR-12-03 · NFR-05).
+
+**503 `LLM_UNAVAILABLE`** — AI 서버가 응답하지 못할 때.
 
 ---
 
@@ -951,7 +979,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `task_context.task` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / **`CLUSTER_NAMING`** / **`ANALYSIS_NARRATE`** / **`FINANCE_QA`** — `CLUSTER_NAMING`·`ANALYSIS_NARRATE`는 v1.3에서 문서가 정의, **v1.6 레포 반영 완료** (06 R4). `FINANCE_QA`는 v1.8 신설 (E-47) |
 | `task_context.status` | `ACTIVE` / `PAUSED` / `COMPLETED` — Spring이 소유. AI는 바꾸지 않는다 |
 | `task_context.state` | 작업별 구조화 상태 (아래 표). **레포는 `dict`로 받으므로 구조는 이 문서가 정본** |
-| `recent_messages` | 최소 최근 대화. 전체 이력을 보내지 않는다 (레포 원칙) |
+| `recent_messages` | 최소 최근 대화. 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION`은 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67) |
 | `tool_results[].data` | 회고 후보(①)의 `purpose`·`companion`은 **표준 태그 또는 `null`** 이어야 한다. 자유 문자열이면 Spring이 버린다 (E-20) |
 | `needs_clarification` | `true`면 클라이언트는 `uncertain_fields`만 선택지 버튼으로 되묻는다 (FR-04-08) |
 | **`fallback`** | **v1.3 추가.** LLM 8초 초과·오류로 템플릿 응답을 돌려줄 때 `true` (FR-04-15). **`OPENAI_API_KEY`가 비어 있을 때도 `true`** (E-38). 클라이언트는 템플릿 모드 배너를 띄운다 (S11) |
@@ -960,11 +988,11 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 
 | `task` | `state` 필수 키 | AI가 돌려주는 것 (`reply`) |
 |---|---|---|
-| `REFLECTION` | `transaction` · `reason_code` · `reflection`(현재까지 확정값) · `step`(`INTRO` / `SATISFACTION` / `PURPOSE` / `COMPANION` / `REPEAT` / `CONFIRM`) | 다음 질문 또는 확인 문장. `INTRO`에서는 `reason_code` 재구성 설명 (FR-04-10·11) |
+| `REFLECTION` | `transaction` · `reason_code` · `reflection`(현재까지 확정값) · `step`(enum `reflectionStep` — v2.3 · E-69) | 다음 질문 또는 확인 문장. `INTRO`에서는 `reason_code` 재구성 설명 (FR-04-10·11) |
 | `ANALYSIS` | `analysis_year_month` (집계는 AI가 `/internal/ai/…/analysis`로 pull) | 사용자 질문에 대한 설명 |
-| `ACTION_PLAN` | `suggestion_ids[]` (상세는 pull) — **v2.3: 외부 `GET /suggestions` 기본 목록(`PROPOSED` + `ADOPTED`)의 `id`**입니다 (E-72). 목록에 없는 id를 실으면 AI가 상세를 못 찾아 수치 없는 안내 문장으로 끝냅니다 | 제안 이유 문장 (FR-08-01) |
+| `ACTION_PLAN` | `suggestion_ids[]` (상세는 pull) | 제안 이유 문장 (FR-08-01) |
 | `CLUSTER_NAMING` | `cluster_key` · `sample_merchants[]` · `tx_count` | 묶음 이름 1개, 12자 이내 (⑤ · FR-05-05) |
-| `ANALYSIS_NARRATE` | **v2.3: `analysis_year_month` · `by_verdict[]` · `by_category[]`** (Spring 집계값 — 외부 `GET /analysis` 집계 record 그대로, 키만 snake_case). **`pending`은 싣지 않습니다** (E-70) — AI가 문장 속 숫자를 `by_verdict`·`by_category` 값과 대조하는 허용목록 가드를 돌리므로 `pending` 수치를 서술하면 그 문장이 버려집니다 | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지** |
+| `ANALYSIS_NARRATE` | `by_verdict[]` · `by_category[]` (Spring 집계값) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지** |
 | `FINANCE_QA` | (거의 없음 — 빈 객체 `{}`) | 근거 기반 답변 문장. 출처는 문장에 자연스럽게 언급, 별도 필드 없음 (⑪ · FR-12 · v1.8 — E-47) |
 
 > `reason_code`·집계값은 항상 Spring이 `state`에 실어 보냅니다. AI가 `reason_code` 없이 이유를 만드는 경로는 없습니다 (NFR-02).
@@ -977,15 +1005,17 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 |---|---|---|---|
 | `get_transactions(user_id, query)` | GET | `/internal/ai/users/{userId}/transactions?from&to&category&size` | `{ "transactions": [ {id, occurredAt, merchant, amount, category, timeSlot, behaviorId} ] }` |
 | `get_reflections(user_id)` | GET | `/internal/ai/users/{userId}/reflections` | `{ "reflections": [ {id, transactionId, satisfaction, purpose, companion, repeatIntent, status} ] }` |
-| `save_reflection(user_id, reflection)` | POST | `/internal/ai/users/{userId}/reflections` | 외부 `POST /retrospects`와 같은 검증·응답. **사용자 확인이 끝난 값만** 보낸다 |
-| `get_behavior_analysis(user_id)` | GET | `/internal/ai/users/{userId}/analysis` | **v2.3 실구현** — `{ analysisYearMonth, byVerdict, pending, byCategory, points }`. 앞 4개는 외부 `GET /analysis`와 같고 `points`는 `GET /satisfaction-map`의 `points`입니다. **`highlight`는 없습니다** (E-70) |
-| `get_action_plan(user_id)` | GET | `/internal/ai/users/{userId}/suggestions` | **v2.3 실구현** — 외부 `GET /suggestions`의 **기본 목록**(`status` 생략 = `PROPOSED` + `ADOPTED`, `REJECTED` 제외)과 같은 `{ suggestions: [ … ] }`. 항목 필드·정렬도 같습니다 (E-72) |
+| `save_reflection(user_id, reflection)` | POST | `/internal/ai/users/{userId}/reflections` | 외부 `POST /retrospects`와 같은 검증·응답. **사용자 확인이 끝난 값만** 보낸다. **(v2.2)** 본문은 `transaction_id` · `satisfaction` · `purpose` · `companion` · `repeat_intention` 5개다 — `transaction_id`가 없으면 어느 거래인지 특정할 수 없다 |
+| `get_behavior_analysis(user_id)` | GET | `/internal/ai/users/{userId}/analysis` | 외부 `GET /analysis` + `GET /satisfaction-map`의 `points`. **(v2.5) `highlight`는 싣지 않는다** — 그 문장을 만드는 게 AI의 일이라, 미리 건네면 AI가 자기 출력을 근거로 삼는다 (E-75) |
+| `get_action_plan(user_id)` | GET | `/internal/ai/users/{userId}/suggestions` | 외부 `GET /suggestions`의 **기본 목록**(`PROPOSED` + `ADOPTED`)과 같다. **(v2.6)** AI는 `suggestions[].id`를 `state.suggestion_ids`와 대조해 고르므로 `id`는 `suggestions` PK다 (E-81) |
 | `get_memory(user_id)` | GET | `/internal/ai/users/{userId}/memory` | `{ "clusters": [ {behaviorId, name, clusterKey, retrospectCount, adjustedSatisfaction, verdict} ], "recentReflections": [ … ] }` — 개인 소비 메모리 요약 |
 
 - 응답은 Spring 기본 **camelCase**입니다. AI 쪽에서 키를 변환하지 않습니다.
 - 요청 본문(`save_reflection`)은 AI가 snake_case로 보내고, Spring은 DTO 필드의 **`@JsonProperty`**(E-24 · `ai/dto`와 같은 방식)로 받습니다 — v2.2 정정 (E-66). `source`가 없으면 `CANDIDATE`로 저장하고, 응답은 외부 `POST /retrospects`와 같은 객체입니다(`data`가 object여야 `SpringClient`가 봉투를 벗깁니다).
 - 외부 API와 같은 `{ success, data }` 봉투를 씁니다. **(v1.6)** `SpringClient._request`가 봉투를 벗겨 `data`만 Tool에 넘기고, `success: false`면 `SpringApiError(code)`를 일으킵니다 (E-39). Tool은 위 표의 `data` 모양을 그대로 받습니다.
-- **(v2.3 — E-70)** 외부 `GET /analysis`의 `highlight`는 이 표의 `analysis`에서 오지 않습니다. **Spring이 AI `POST /chat`(`task = ANALYSIS_NARRATE`)을 직접 불러 받습니다.** 그런데 AI의 허용목록 가드가 걸리면 `fallback_reply`를 그대로 돌려주면서 응답의 `fallback`이 **`false`로 나가서**, Spring이 정적 폴백 문장을 AI 문장으로 오인합니다. AI 레포에서 이 경로에 `fallback = true`를 싣도록 06 **R19**로 올립니다(선택).
+- **(v2.3 — E-70) 성공 응답의 `data`는 항상 JSON object입니다.** 돌려줄 것이 없어도 `null`이 아니라 빈 객체를 싣습니다.
+  `SpringClient._request`가 object가 아닌 `data`를 예외로 처리하므로, `data` 없는 200은 **AI에서 500**이 되고 Spring은 그것을 **503 `LLM_UNAVAILABLE`** 로 보여줍니다 —
+  LLM은 멀쩡한데 저장만 실패하는, 원인을 찾기 어려운 증상이 됩니다. Spring 쪽은 `ApiResponse<Void>`를 쓰지 않는 것으로 지킵니다 (server `InternalAiContractTest`).
 
 ### 타임아웃 · 폴백 (NFR-04 · FR-04-15)
 

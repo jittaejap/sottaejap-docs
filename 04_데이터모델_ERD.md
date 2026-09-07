@@ -1,8 +1,8 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.3 | **기준일:** 2026-09-07 | **담당:** 고현석
+**버전:** v2.7 | **기준일:** 2026-09-07 | **담당:** 고현석
 
-> **v2.3 변경 (2026-09-07):** 스키마 변경은 server **`V5`의 `suggestions` 인덱스 3개뿐이고 컬럼 변경은 없습니다** (01 E-72 · 06 R18). §3 산식에 6줄을 더했습니다 — `share` 분모와 `byCategory.avgAmount`(E-68) · **유효 묶음** `retrospectCount > 0 AND parentId IS NULL`(E-67) · **제안 대상**과 `Suggestion.adjustCount`(E-72 · E-73) · `Goal.projectedRate`(E-74). `Suggestion`은 사용자가 만드는 행이 아니라 **회고 저장 재계산의 파생 행**이고, 채택은 `Goal.currentAmount`를 바꾸지 않습니다 (E-72 · E-73 · E-74).
+> **v2.7 변경 (2026-09-07):** `FinancialChunk` 마이그레이션을 **`V8__financial_chunks.sql`**로, `embedding`을 **`vector(1536)`**(`text-embedding-3-small`)로 확정했습니다 (01 E-85). 벡터 인덱스는 두지 않습니다. 종전의 `V3` · `vector(N)` 표기는 폐기입니다 — `V3`는 `V3__drop_card_issuer.sql`이 먼저 썼습니다. 다른 엔티티는 그대로입니다.
 >
 > **v2.2 변경 (2026-09-07):** 스키마 변경 없음(V5 없음). §3 산식에 **분모·null 정의**(01 E-61) · **롤업 상위 키 `카테고리|시간대||`**(E-59) · `analysisYearMonth` = **사용자의 최근 거래월**(E-60, 06 R11 종결)을 적었습니다. `BehaviorCluster.clusterKey`의 시간대 자리는 식사 목록(`rules.cluster.meal-categories`)이거나 **`기타`(미분류)일 때** 포함합니다 (E-58).
 >
@@ -119,8 +119,6 @@
 | quadrant | enum **nullable** | `PROTECT` / `KEEP` / `MINOR` / `PRIORITY` — **좌표. `PENDING`일 때 `null`** (v1.2 변경) |
 | verdict | enum **nullable** | **`SUSTAIN`(지켜요) / `ADJUST`(바꿔볼까요)** — 처방. `PENDING`일 때 `null` (v1.2 변경) |
 
-> **v2.3 — 유효 묶음** = `retrospectCount > 0 AND parentId IS NULL`입니다 (E-67). 지도 · 분석 집계 · 제안 대상은 전부 이 집합이며, 롤업된 리프는 상위 묶음이 대신합니다(이중 집계 방지).
->
 > `clusterKey` 조합·`parentId` 롤업·`burdenRatio`·`quadrant`·`verdict`는
 > **규칙 엔진(Spring·정민규)** 이 결정론적으로 산출합니다 (v1.3 — E-18). `displayName`만 AI가 생성합니다 (`/chat` `CLUSTER_NAMING`).
 >
@@ -137,12 +135,10 @@
 |---|---|---|
 | id | PK | |
 | userId | FK → User | |
-| name | string | 비상금 / 독립 / 여행. **v2.3:** 1~50자, 위반 400 `INVALID_INPUT` (E-74) |
-| targetAmount | int | **v2.3:** `≥ 1` (E-74) |
-| currentAmount | int | **v2.3:** `≥ 0`, 생략 시 0. **채택으로 바뀌지 않는다** — 실적 반영은 월간 리포트 몫 (E-73 · E-74) |
-| deletedAt | timestamp | v1.2 추가 — soft delete (FR-01-02 삭제). **v2.3:** 삭제 후에도 `suggestions.goal_id`는 유지, 목록은 미삭제만 `id` 오름차순 (E-74) |
-
-> **v2.3 — `adoptedSaving` · `achievementRate` · `projectedRate`는 컬럼이 아닙니다.** `GET /goals`가 조회 시점에 계산해 내리는 **파생값**입니다 (E-74) — `adoptedSaving` = 그 목표를 가리키는 ADOPTED 제안의 `expectedSaving` 합 · `achievementRate = currentAmount ÷ targetAmount` · `projectedRate = (currentAmount + adoptedSaving) ÷ targetAmount`. 저장하면 채택·철회 때마다 세 값이 어긋납니다.
+| name | string | 비상금 / 독립 / 여행 |
+| targetAmount | int | |
+| currentAmount | int | **실적**. 채택은 이 값을 바꾸지 않는다 (v2.6 — E-82) |
+| deletedAt | timestamp | v1.2 추가 — soft delete (FR-01-02 삭제). 지워도 `suggestions.goalId`는 남는다 (E-83) |
 
 ### Suggestion
 
@@ -150,15 +146,16 @@
 |---|---|---|
 | id | PK | |
 | behaviorId | FK → BehaviorCluster | |
-| adjustCount | int | 사용자 선택 **조정 횟수**. **v2.3:** PROPOSED 초기값은 `txCount`, adopt 때 `1 ≤ n ≤ txCount` (E-72 · E-73) |
-| expectedSaving | int | `avgAmount × adjustCount`. **v2.3:** PROPOSED는 재계산마다 갱신, ADOPTED는 **채택 당시 값으로 불변** (E-72) |
-| goalId | FK → Goal | 배분 대상. **v2.3:** `ADOPTED`에만 채워지고, 목표를 soft delete해도 값은 유지 (E-73 · E-74) |
-| status | enum | `PROPOSED` / `ADOPTED` / `REJECTED`. **v2.3 전이:** `PROPOSED → ADOPTED/REJECTED` · `ADOPTED → ADOPTED`(횟수·목표 수정) · `ADOPTED → REJECTED`(철회) · `REJECTED`는 종단 (E-73) |
+| adjustCount | int | 사용자 선택 **조정 횟수** |
+| expectedSaving | int | `avgAmount × adjustCount` |
+| goalId | FK → Goal | 배분 대상 |
+| status | enum | `PROPOSED` / `ADOPTED` / `REJECTED` |
 | createdAt | timestamp | |
 
-> **v2.3 — 제안은 회고 저장 재계산의 파생 행입니다** (E-72). 생성 API가 없고, `recomputeAll` 끝에서 동기화합니다. 대상은 **유효 묶음**(E-67) 중 RESOLVED · `verdict = ADJUST` · `avgAmount ≠ null`인 묶음이며 묶음당 PROPOSED 1행입니다. 대상에서 빠진 PROPOSED는 삭제하고, ADOPTED · REJECTED는 보존합니다.
-> **v2.3 — server `V5` 인덱스 3개** (컬럼 변경 없음 · 06 R18): `ix_suggestions_behavior(behavior_id)` · `ix_suggestions_goal(goal_id) WHERE goal_id IS NOT NULL` · `uq_suggestions_proposed(behavior_id) WHERE status = 'PROPOSED'`.
-> `suggestions`에는 **`user_id` 컬럼이 없습니다.** 소유 확인은 `behavior_clusters` 조인으로 합니다.
+> **(v2.6 — E-81) 재계산 파생 행입니다.** `recomputeAll`이 대상 묶음마다 `PROPOSED` 1행을 두고 제자리 갱신하며,
+> 비대상이 된 `PROPOSED`는 지웁니다. `ADOPTED`·`REJECTED`는 보존·불변이고 그 묶음에 새 `PROPOSED`를 만들지 않습니다.
+> `V7`에 **`uq_suggestions_proposed(behavior_id) WHERE status='PROPOSED'`** 부분 유일 인덱스를 둡니다.
+> **`userId`가 없습니다** — 사용자 판별은 `behaviorId` → `BehaviorCluster.userId` 조인입니다.
 
 ### MonthlySnapshot
 
@@ -172,8 +169,6 @@
 | **repeatCount** | int | **v1.2 신설 — 조정 대상 행동의 반복 횟수** (FR-08-07) |
 | savedAmount | int | 전월 대비 감소액 |
 
-> **v2.3 범위 밖입니다** (E-75). `GET /reports/monthly`와 함께 다음 라운드에서 정합니다 — `savedAmount`의 "전월 대비"가 무엇 대비인지, 스냅샷을 언제 만드는지가 아직 문서에 없습니다. 그전까지 제안 채택은 `Goal.currentAmount`를 바꾸지 않습니다 (E-73).
-
 ### Notification
 
 | 필드 | 타입 | 비고 |
@@ -186,7 +181,7 @@
 | isRead | boolean | 기본 false |
 | createdAt | timestamp | |
 
-### FinancialChunk (v1.3 신설 · P2 — E-21·E-22)
+### FinancialChunk (v1.3 신설 · **v2.7 적용 — server `V8`** — E-21·E-22·**E-85**)
 
 | 필드 | 타입 | 비고 |
 |---|---|---|
@@ -195,10 +190,11 @@
 | content | text | 청크 본문 |
 | source | string | 출처 (기관 · 문서명 · URL) |
 | metadata | jsonb | 기준 시점 등 — 레포 `metadata` |
-| embedding | vector(N) | pgvector — 차원 N은 임베딩 모델 확정 시 (P2) |
+| embedding | vector(1536) | pgvector — `text-embedding-3-small` 차원 (E-85) |
 
 > 사용자와 무관한 공개 문서 저장소입니다. `userId`가 없습니다.
-> 마이그레이션은 **P2 착수 시** `V3__financial_chunks.sql`로 추가하며, 그때 `CREATE EXTENSION IF NOT EXISTS vector`를 함께 실행합니다.
+> 마이그레이션은 **`V8__financial_chunks.sql`** 입니다 (E-85 — `V3`는 `V3__drop_card_issuer.sql`이 먼저 썼습니다).
+> `CREATE EXTENSION IF NOT EXISTS vector`를 같은 파일에서 함께 실행하며, 벡터 인덱스는 두지 않습니다 — 데모 규모에서는 순차 스캔이 더 빠릅니다.
 
 ---
 
@@ -265,19 +261,26 @@ verdict               = evaluationStatus == PENDING ? null
 정렬 우선순위          = ADJUST 먼저, 그 안에서 burdenRatio 내림차순
                         ( = 지도상 오른쪽 아래부터 )
 
-expectedSaving        = avgAmount × Suggestion.adjustCount
+expectedSaving        = avgAmount × Suggestion.adjustCount            # 1 ≤ adjustCount ≤ txCount — E-82
+                        채택 시점의 avgAmount로 굳는다. 이후 재계산이 바꾸지 않는다 (E-81)
 
-share                 = monthlyTotalAmount ÷ User.monthlyBudget   (byVerdict · pending · 예산 없으면 null · 반올림 없음)   # E-68
-byCategory.avgAmount  = Σ monthlyTotalAmount ÷ Σ txCount   (정수 내림 · Σ txCount 0이면 null)                            # E-68
-유효 묶음              = retrospectCount > 0 AND parentId IS NULL   (지도 · 분석 · 제안 대상)                              # E-67
-제안 대상              = 유효 묶음 AND RESOLVED AND verdict = ADJUST AND avgAmount IS NOT NULL                             # E-72
-Suggestion.adjustCount = txCount (PROPOSED 초기값 · 재계산마다 갱신) / adopt 시 1 ≤ n ≤ txCount                             # E-72 · E-73
-Goal.projectedRate     = (currentAmount + Σ ADOPTED expectedSaving) ÷ targetAmount   (achievementRate = currentAmount ÷ targetAmount)   # E-74
+제안 대상              = 유효 묶음 ∧ RESOLVED ∧ ADJUST ∧ avgAmount ≠ null    # E-81
+                        상위 묶음 · MINOR · quadrant null 포함. PROTECT 제외 (02 §FR-07)
+
+제안 정렬              = PRIORITY → MINOR → quadrant null,                  # E-81
+                        각 안에서 burdenRatio 내림차순(null 마지막), id 오름차순
+                        ※ 지도·묶음 목록의 정렬(ADJUST→SUSTAIN→보류)과 다르다 — 저건 판정, 이건 좌표 기준
+
+adoptedSaving         = Σ Suggestion.expectedSaving                        # E-83
+                        WHERE goalId = this AND status = ADOPTED
+
+achievementRate       = Goal.currentAmount ÷ Goal.targetAmount             # E-83, raw double
+projectedRate         = (Goal.currentAmount + adoptedSaving) ÷ targetAmount
+                        targetAmount ≤ 0이면 둘 다 null. 반올림은 화면이 한다
 ```
 
 > ⚠️ `k`(#15) · 롤업 기준(#16) · 보류 임계값(#17) · 축 경계 `Bx`/`By`(#18)는 **Spring `application.yml`의 `rules.*` 설정 파라미터**로 분리합니다 (07 §7). **v2.2:** 잠정값 `3 · 3 · 3 · 0.1 · 0`을 기본값으로 주입했습니다 (E-57). 회고 저장 시 **사용자 전체 묶음**을 재계산합니다 (E-61).
 > 9/7 튜닝이 값 주입만으로 끝나야 합니다. `TAG_MATCH_MIN_SIMILARITY`·`EMBEDDING_MODEL`은 E-20으로 삭제되었습니다.
-> **v2.3:** 제안 대상은 유효 묶음 중 RESOLVED · `ADJUST` · `avgAmount ≠ null`이고, 제안 정렬은 `quadrant` `PRIORITY → MINOR → null` → `burdenRatio` 내림차순(`null` 마지막) → `id` 오름차순입니다 (E-72). `byCategory` 정렬은 합계 내림차순 → `category` 오름차순이며 합계 0은 제외합니다 (E-68).
 
 ---
 
