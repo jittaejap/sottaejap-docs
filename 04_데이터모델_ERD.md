@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.8 | **기준일:** 2026-09-08 | **담당:** 고현석
+**버전:** v2.9 | **기준일:** 2026-09-08 | **담당:** 고현석
 
+> **v2.9 변경 (2026-09-08):** `FinancialChunk`에 **`createdAt`을 신설**하고 **`source`를 `NOT NULL`로 못 박습니다** (server PR #22 리뷰). `createdAt`은 다른 테이블과 같은 `TIMESTAMPTZ NOT NULL DEFAULT now()`입니다 — 재적재가 `ON CONFLICT (chunk_id) DO UPDATE`로 도는 탓에, 없으면 청크가 언제 처음 들어왔는지 DB만 보고는 알 수 없습니다. `source`는 종전에 nullable 여부를 적지 않아 `sottaejap-ai`의 `FinancialChunk.source`가 `str | None`으로 갈렸습니다 — FR-12-02·03이 출처 언급을 요구하므로 **출처 없는 청크는 적재하지 않습니다**(06 R23). `CREATE EXTENSION`은 `WITH SCHEMA public`으로 설치 위치를 못 박습니다. 다른 엔티티는 그대로입니다.
+>
 > **v2.8 변경 (2026-09-08):** **`ChatMessage` · `PushSubscription` 엔티티 2개 신설** (01 E-67 · E-68 각주 반영). 마이그레이션은 server **`V5__push_subscriptions.sql`** · **`V6__chat_messages.sql`**입니다. `ChatMessage`에 지금 쌓이는 것은 **금융 Q&A뿐**입니다 — 회고 대화는 클라이언트가 소유합니다 (E-67 · E-63). 조회 정렬은 `created_at DESC, id DESC`입니다 — 질문과 답변이 같은 `created_at`을 갖기 때문입니다 (E-87 · server PR #12 리뷰).
 >
 > **v2.7 변경 (2026-09-07):** `FinancialChunk` 마이그레이션을 **`V8__financial_chunks.sql`**로, `embedding`을 **`vector(1536)`**(`text-embedding-3-small`)로 확정했습니다 (01 E-85). 벡터 인덱스는 두지 않습니다. 종전의 `V3` · `vector(N)` 표기는 폐기입니다 — `V3`는 `V3__drop_card_issuer.sql`이 먼저 썼습니다. 다른 엔티티는 그대로입니다.
@@ -224,13 +226,16 @@
 | id | PK | |
 | chunkId | string | 레포 `FinancialChunk.chunk_id` |
 | content | text | 청크 본문 |
-| source | string | 출처 (기관 · 문서명 · URL) |
+| source | string | 출처 (기관 · 문서명 · URL) — **NOT NULL** (v2.9) |
 | metadata | jsonb | 기준 시점 등 — 레포 `metadata` |
 | embedding | vector(1536) | pgvector — `text-embedding-3-small` 차원 (E-85) |
+| createdAt | timestamptz | 최초 적재 시점 (v2.9) — `NOT NULL DEFAULT now()` |
 
 > 사용자와 무관한 공개 문서 저장소입니다. `userId`가 없습니다.
 > 마이그레이션은 **`V8__financial_chunks.sql`** 입니다 (E-85 — `V3`는 `V3__drop_card_issuer.sql`이 먼저 썼습니다).
-> `CREATE EXTENSION IF NOT EXISTS vector`를 같은 파일에서 함께 실행하며, 벡터 인덱스는 두지 않습니다 — 데모 규모에서는 순차 스캔이 더 빠릅니다.
+> `CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public`을 같은 파일에서 함께 실행하며, 벡터 인덱스는 두지 않습니다 — 데모 규모에서는 순차 스캔이 더 빠릅니다.
+> `WITH SCHEMA`를 생략하면 확장이 `search_path`의 첫 스키마에 깔립니다 — Flyway가 `defaultSchema`를 맨 앞에 붙여, 설치 위치가 실행 순서에 따라 달라집니다.
+> 재적재는 `ON CONFLICT (chunk_id) DO UPDATE`로 제자리 갱신하며 `createdAt`은 그대로 둡니다.
 
 ---
 
