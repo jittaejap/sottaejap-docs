@@ -1,6 +1,12 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.15 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.16 | **기준일:** 2026-09-09 | **Base URL:** `______`
+
+> **v2.16 변경 (2026-09-09 — 온보딩 표본 추출):** §2 `POST /onboarding/start`에 **Response와 표본 선정 규칙을
+> 신설합니다** (E-92). 종전에는 Request만 있어 서버가 무엇을 돌려줘야 하는지 문서에 없었습니다. 응답은
+> `GET /retrospects/candidates`와 **같은 `candidates` 배열**이고 `reasonCode`는 전부 `ONBOARDING_SAMPLE`입니다 —
+> `ONBOARDING_SAMPLE`을 만드는 경로는 여기 하나뿐입니다. §2 `POST /onboarding/complete`의 `clusterCount` 정의와
+> 호출 시점(4단계 — E-45)도 함께 적습니다. server 이슈 #28 · 06 R25.
 
 > **v2.15 변경 (2026-09-09 — 업로드 뒤 묶음 재계산):** §2 `POST /transactions/upload`에 **업로드 커밋 뒤 묶음을 다시 계산한다**를 명시합니다 (E-95). 재계산은 다른 트랜잭션이고 실패해도 200이며, `importedCount`가 0이면 건너뜁니다. 요청 · 응답 본문은 그대로입니다 — 계약 변경이 아니라 종전에 적지 않았던 동작을 못 박는 것입니다. server 이슈 #27 · 06 R24.
 
@@ -900,23 +906,84 @@
 
 ---
 
-### `POST /onboarding/start`
+### `POST /onboarding/start` (v2.16 — Response · 선정 규칙 신설 · E-92)
 
-과거 거래(26.06~07)에서 표본을 추출해 연속 회고를 시작합니다.
+과거 거래(26.06~07)에서 표본을 추출해 연속 회고를 시작합니다. 온보딩 3단계에서 업로드
+(`POST /transactions/upload`) 직후에 부르고, 응답의 표본이 4단계 연속 회고의 목록이 됩니다.
 
 **Request**
 ```json
 { "sampleSize": 20, "periodFrom": "2026-06-01", "periodTo": "2026-07-31" }
 ```
 
-### `POST /onboarding/complete` (v1.2 신설 — FR-09-02)
+| 필드 | 규칙 |
+|---|---|
+| `sampleSize` | 1 이상. **필수.** 100을 넘으면 400이 아니라 **100으로 자릅니다**(후보 API와 같은 상한) |
+| `periodFrom` · `periodTo` | `YYYY-MM-DD`(KST). **둘 다 필수.** 업로드 응답의 `periodFrom`·`periodTo`를 그대로 싣습니다 |
 
-5단계 완료 시 호출. `onboardingCompleted = true` 저장 후 초기 만족도 지도를 생성합니다.
+어기면 400 `INVALID_INPUT`입니다. `periodFrom`이 `periodTo`보다 뒤여도 400입니다.
+
+**Response 200** — `GET /retrospects/candidates`와 **같은 `candidates` 배열**입니다.
+
+```json
+{
+  "success": true,
+  "data": {
+    "candidates": [{
+      "transactionId": 1043,
+      "occurredAt": "2026-07-22T23:10:00+09:00",
+      "merchant": "○○배달",
+      "amount": 12000,
+      "category": "배달",
+      "timeSlot": "NIGHT",
+      "reasonCode": "ONBOARDING_SAMPLE",
+      "reason": "최근 소비 중에서 함께 돌아볼 거래로 골랐어요."
+    }]
+  }
+}
+```
+
+**표본 선정 규칙 (E-92)**
+
+| 단계 | 규칙 |
+|---|---|
+| ① 대상 | `periodFrom` 00:00 ~ `periodTo` 24:00(KST) 사이의 거래 중 **아직 회고하지 않은 것**(E-62 ②와 같은 조건) |
+| ② 정렬 | 최신순(`occurredAt desc, id desc`) |
+| ③ 추출 | **같은 간격으로 건너뛰며** `sampleSize`건. 간격 = `전체 건수 ÷ sampleSize`(최소 1) |
+| ④ `reasonCode` | 전부 `ONBOARDING_SAMPLE`. `reason`은 그 코드의 Spring 템플릿 한 문장(E-62) |
+
+> **후보 API(#8)로 갈음하지 않는 이유입니다.** 후보 규칙 ③④⑤ 중 ⑤는 이전 회고가 있어야 걸리는데 온보딩
+> 시점의 회고는 0건이고, 규칙은 최신 100건 안에서만 봅니다(v2.9). 두 달치 CSV를 올려도 표본 20건이 모이지
+> 않습니다 — 로컬 실측에서 `GET /retrospects/candidates?limit=20`이 0건이었습니다.
+> **`ONBOARDING_SAMPLE`을 만드는 경로는 이 엔드포인트 하나뿐입니다** — `GET /retrospects/candidates`는
+> 지금처럼 규칙 ③④⑤만 냅니다.
+>
+> **최신 20건을 자르지 않고 간격으로 고르는 이유입니다.** 앞에서 20건을 자르면 기간의 마지막 한 주만 남아
+> 첫 만족도 지도의 묶음이 한 주에 쏠립니다.
+>
+> **표본은 저장하지 않습니다** (E-49 · E-65). 난수를 쓰지 않으므로 같은 요청이면 같은 표본이고(E-18),
+> 회고를 저장하면 그 거래가 다음 호출에서 빠집니다. 기간 안에 회고할 거래가 없으면 `candidates`는 `[]`입니다.
+
+### `POST /onboarding/complete` (v1.2 신설 — FR-09-02 · v2.16 동작 명시)
+
+**4단계**(표본 회고) 완료 시 호출합니다 — 온보딩은 4단계입니다(E-45). `onboardingCompleted = true`를
+저장한 뒤 초기 만족도 지도를 생성합니다. 요청 본문은 없습니다.
 
 **Response 200**
 ```json
 { "success": true, "data": { "onboardingCompleted": true, "clusterCount": 15 } }
 ```
+
+| 필드 | 의미 |
+|---|---|
+| `onboardingCompleted` | 항상 `true`입니다. 다음 로그인부터 `GET /users/me`가 같은 값을 줍니다 |
+| `clusterCount` | **지도에 찍히는 점의 수** — `retrospectCount > 0`이고 상위가 없는 유효 묶음(E-72)의 개수입니다 |
+
+> **초기 지도 생성은 사용자 전체 묶음 재계산입니다** (E-61). 회고를 한 건도 저장하지 않고 부르면
+> `clusterCount`는 0이고, 그래도 플래그는 저장됩니다 — 온보딩을 끝냈는데 홈에 못 들어가는 상태를 만들지
+> 않기 위해서입니다. 두 번 불러도 결과가 같습니다.
+>
+> 묶음 이름은 여기서 짓지 않습니다. `POST /retrospects`가 저장할 때마다 이름 없는 묶음을 이미 채웁니다(E-64).
 
 ---
 
