@@ -1,6 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.6 | **기준일:** 2026-09-07 | **Base URL:** `______`
+**버전:** v2.8 | **기준일:** 2026-09-08 | **Base URL:** `______`
+
+> **v2.8 변경 (2026-09-08 — 최근 대화 정렬 계약 · E-87):** §2 `POST /retrospects/chat`의 `recentMessages`와
+> §3 내부 AI `POST /chat`의 `recent_messages`는 **오름차순(오래된 → 최신)** 입니다. 마지막 원소가 가장 최근 발화입니다.
 
 > **v2.6 변경 (2026-09-07 — 제안 · 목표 슬라이스):** §0 공통 enum에 **`suggestionStatus`** 신설 (E-81) /
 > §2 **본문 명세 신설 6종** — `GET /goals`(#4) · `POST /goals`(#5) · `PUT /goals/{id}` · `DELETE /goals/{id}`(#5a) ·
@@ -385,7 +388,7 @@
 | `message` | `INTRO`에서는 생략 가능 — 서버가 고정 문구로 대체해 AI에 보냅니다(AI는 빈 메시지를 받지 않음). 그 외 단계는 필수 |
 | `step` | `INTRO` / `SATISFACTION` / `PURPOSE` / `COMPANION` / `REPEAT` / `CONFIRM`. 생략 시 `INTRO` |
 | `reflection` | 사용자가 **이미 확인한** 값. 표준 태그 밖 문자열은 **400 `INVALID_TAG`** |
-| `recentMessages` | 최근 대화. 서버는 **최근 6개**만 AI에 전달합니다 |
+| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화입니다. 서버는 **최근 6개**만 AI에 전달합니다 (E-87) |
 
 **Response 200**
 ```json
@@ -979,7 +982,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `task_context.task` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / **`CLUSTER_NAMING`** / **`ANALYSIS_NARRATE`** / **`FINANCE_QA`** — `CLUSTER_NAMING`·`ANALYSIS_NARRATE`는 v1.3에서 문서가 정의, **v1.6 레포 반영 완료** (06 R4). `FINANCE_QA`는 v1.8 신설 (E-47) |
 | `task_context.status` | `ACTIVE` / `PAUSED` / `COMPLETED` — Spring이 소유. AI는 바꾸지 않는다 |
 | `task_context.state` | 작업별 구조화 상태 (아래 표). **레포는 `dict`로 받으므로 구조는 이 문서가 정본** |
-| `recent_messages` | 최소 최근 대화. 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION`은 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67) |
+| `recent_messages` | 최소 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화다 (E-87). 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION`은 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67) |
 | `tool_results[].data` | 회고 후보(①)의 `purpose`·`companion`은 **표준 태그 또는 `null`** 이어야 한다. 자유 문자열이면 Spring이 버린다 (E-20) |
 | `needs_clarification` | `true`면 클라이언트는 `uncertain_fields`만 선택지 버튼으로 되묻는다 (FR-04-08) |
 | **`fallback`** | **v1.3 추가.** LLM 8초 초과·오류로 템플릿 응답을 돌려줄 때 `true` (FR-04-15). **`OPENAI_API_KEY`가 비어 있을 때도 `true`** (E-38). 클라이언트는 템플릿 모드 배너를 띄운다 (S11) |
