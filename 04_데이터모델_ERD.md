@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.9 | **기준일:** 2026-09-08 | **담당:** 고현석
+**버전:** v2.10 | **기준일:** 2026-09-09 | **담당:** 고현석
 
+> **v2.10 변경 (2026-09-09):** §3에 **`MonthlySnapshot` 산식 4종과 확정 규칙**(01 E-94) · **`Goal.currentAmount` 실적 배분** 규칙을 추가합니다. 스키마 변경 없음 — `monthly_snapshots`는 V1 그대로입니다. `savedAmount`는 전체 지출 차(음수 허용), 지난달은 첫 조회 때 확정, 이번 달은 저장하지 않습니다.
+>
 > **v2.9 변경 (2026-09-08):** `FinancialChunk`에 **`createdAt`을 신설**하고 **`source`를 `NOT NULL`로 못 박습니다** (server PR #22 리뷰). `createdAt`은 다른 테이블과 같은 `TIMESTAMPTZ NOT NULL DEFAULT now()`입니다 — 재적재가 `ON CONFLICT (chunk_id) DO UPDATE`로 도는 탓에, 없으면 청크가 언제 처음 들어왔는지 DB만 보고는 알 수 없습니다. `source`는 종전에 nullable 여부를 적지 않아 `sottaejap-ai`의 `FinancialChunk.source`가 `str | None`으로 갈렸습니다 — FR-12-02·03이 출처 언급을 요구하므로 **출처 없는 청크는 적재하지 않습니다**(06 R23). `CREATE EXTENSION`은 `WITH SCHEMA public`으로 설치 위치를 못 박습니다. 다른 엔티티는 그대로입니다.
 >
 > **v2.8 변경 (2026-09-08):** **`ChatMessage` · `PushSubscription` 엔티티 2개 신설** (01 E-67 · E-68 각주 반영). 마이그레이션은 server **`V5__push_subscriptions.sql`** · **`V6__chat_messages.sql`**입니다. `ChatMessage`에 지금 쌓이는 것은 **금융 Q&A뿐**입니다 — 회고 대화는 클라이언트가 소유합니다 (E-67 · E-63). 조회 정렬은 `created_at DESC, id DESC`입니다 — 질문과 답변이 같은 `created_at`을 갖기 때문입니다 (E-87 · server PR #12 리뷰).
@@ -141,7 +143,7 @@
 | userId | FK → User | |
 | name | string | 비상금 / 독립 / 여행 |
 | targetAmount | int | |
-| currentAmount | int | **실적**. 채택은 이 값을 바꾸지 않는다 (v2.6 — E-82) |
+| currentAmount | int | **실적**. 채택은 이 값을 바꾸지 않는다 (v2.6 — E-82). **지난달 스냅샷이 확정될 때 `savedAmount > 0`을 `ADOPTED` 제안이 붙은 목표에 `expectedSaving` 비율로 배분해 더한다** (v2.10 — E-94) |
 | deletedAt | timestamp | v1.2 추가 — soft delete (FR-01-02 삭제). 지워도 `suggestions.goalId`는 남는다 (E-83) |
 
 ### Suggestion
@@ -167,11 +169,11 @@
 |---|---|---|
 | id | PK | |
 | userId | FK → User | |
-| yearMonth | string | `2026-08` |
+| yearMonth | string | `2026-08`. **지난달은 첫 조회 때 확정(upsert 후 고정), 이번 달은 저장하지 않는다** (v2.10 — E-94) |
 | totalSpending | int | |
-| unsatisfiedCount | int | 아쉬운 소비 건수 |
-| **repeatCount** | int | **v1.2 신설 — 조정 대상 행동의 반복 횟수** (FR-08-07) |
-| savedAmount | int | 전월 대비 감소액 |
+| unsatisfiedCount | int | 아쉬운 소비 건수 — 그 달 거래의 회고 중 `LOW` 건수 (v2.10 — E-94) |
+| **repeatCount** | int | **v1.2 신설 — 조정 대상 행동의 반복 횟수** (FR-08-07). v2.10: 유효 묶음 ∧ RESOLVED ∧ ADJUST 묶음의 그 달 거래 건수 합 (E-94) |
+| savedAmount | int | 전월 대비 감소액 — **전월 `totalSpending` − 당월** (v2.10 — E-94). 음수 허용, 전월 없으면 null |
 
 ### Notification
 
@@ -321,6 +323,20 @@ adoptedSaving         = Σ Suggestion.expectedSaving                        # E-
 achievementRate       = Goal.currentAmount ÷ Goal.targetAmount             # E-83, raw double
 projectedRate         = (Goal.currentAmount + adoptedSaving) ÷ targetAmount
                         targetAmount ≤ 0이면 둘 다 null. 반올림은 화면이 한다
+
+── MonthlySnapshot (v2.10 — E-94) ──────────────────────────────────────────────
+totalSpending(M)      = Σ Transaction.amount WHERE userId AND yearMonth(KST) = M
+savedAmount(M)        = totalSpending(M−1) − totalSpending(M)          # 전체 지출 차. 음수 허용. M−1 값이 없으면 null
+unsatisfiedCount(M)   = COUNT Retrospect WHERE satisfaction = LOW AND transaction.yearMonth = M
+repeatCount(M)        = Σ txCount(M) OVER 묶음 WHERE 유효(E-72) ∧ RESOLVED ∧ verdict = ADJUST   # E-73 정합
+확정 규칙             = M < 현재 KST 연월 : 스냅샷 없으면 계산 → upsert, 있으면 그대로 (다시 계산하지 않는다)
+                        M = 현재 연월     : 계산만, 저장 없음
+                        M > 현재 연월     : 400
+                        현재 연월은 서비스가 Clock으로 넘긴다. rules/는 now()를 부르지 않는다
+
+Goal.currentAmount   += floor(savedAmount(M) × expectedSaving(goal) ÷ Σ expectedSaving)   # M 확정 시 1회 · savedAmount > 0일 때만
+                        대상 = ADOPTED 제안이 붙은 목표. 나머지 원 단위는 배분액이 가장 큰 목표에. 대상이 없으면 배분 없음
+                        확정과 배분은 한 트랜잭션 — 두 번 더해지지 않는다. 채택 시점 규칙(E-82)은 그대로
 ```
 
 > ⚠️ `k`(#15) · 롤업 기준(#16) · 보류 임계값(#17) · 축 경계 `Bx`/`By`(#18)는 **Spring `application.yml`의 `rules.*` 설정 파라미터**로 분리합니다 (07 §7). **v2.2:** 잠정값 `3 · 3 · 3 · 0.1 · 0`을 기본값으로 주입했습니다 (E-57). 회고 저장 시 **사용자 전체 묶음**을 재계산합니다 (E-61).

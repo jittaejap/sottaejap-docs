@@ -1,6 +1,8 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.13 | **기준일:** 2026-09-08 | **Base URL:** `______`
+**버전:** v2.14 | **기준일:** 2026-09-09 | **Base URL:** `______`
+
+> **v2.14 변경 (2026-09-09 — 거래 목록 · 월간 리포트 본문 신설):** §2에 **`GET /transactions`**(#7 · E-93)와 **`GET /reports/monthly`**(#17 · E-94) 상세 블록을 신설합니다. 목록 표에만 있고 본문이 없던 마지막 두 외부 API입니다. 거래 목록은 회고 요약을 실어 회고 이력 탭을 겸하고, 월간 리포트는 지난달을 첫 조회 때 확정하며 `Goal.currentAmount` 실적을 그때 배분합니다. server 이슈 #29 · #30.
 
 > **v2.13 변경 (2026-09-08 — `highlight` AI 미호출 조건):** §2 `GET /analysis`의 `highlight` 폴백에서 **AI를 부르지 않는
 > 조건에 `byCategory`가 비어 있는 경우를 더합니다** (E-91). 종전에는 "유효 묶음 0개"만 적어, 회고한 거래가 전부
@@ -286,6 +288,51 @@
 ```
 
 ---
+
+### `GET /transactions` (v2.14 본문 신설 — #7 · FR-02-02 · E-93 · 회고 이력 겸용)
+
+**Request** — Query
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| `from` | date · optional | 없음 | KST 날짜, 포함 |
+| `to` | date · optional | 없음 | KST 날짜, 포함 |
+| `category` | string · optional | 없음 | 내부 통합 카테고리(§0 enum). 다른 값은 400 |
+| `hasRetrospect` | boolean · optional | 없음 | `true` = 회고 있는 거래만(회고 이력 탭) · `false` = 없는 거래만 · 생략 = 전체 |
+| `page` | int | **0** | §0 페이징 규약 |
+| `size` | int | **20** | 상한 **100** — 넘으면 100으로 자른다(400 아님). 1 미만은 400 |
+
+> 정렬은 내부 AI 조회와 같은 **`occurredAt desc, id desc`** 고정입니다. 정렬 파라미터는 없습니다.
+> `from > to`는 400 `INVALID_INPUT`. 남의 거래는 보이지 않고, 조건에 맞는 거래가 없으면 빈 배열로 **200**입니다.
+> 내부 AI `GET /internal/ai/users/{userId}/transactions`(§3 `TransactionAiView`)와 **DTO를 공유하지 않습니다** — 그쪽은 계약이 고정돼 있습니다.
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "transactions": [{
+      "id": 1043,
+      "occurredAt": "2026-08-22T23:10:00+09:00",
+      "merchant": "○○배달",
+      "amount": 12000,
+      "category": "배달",
+      "timeSlot": "NIGHT",
+      "retrospectId": 77,
+      "satisfaction": "LOW"
+    }],
+    "page": 0,
+    "size": 20,
+    "totalElements": 143,
+    "totalPages": 8
+  }
+}
+```
+
+| 필드 | 설명 |
+|---|---|
+| `retrospectId` · `satisfaction` | 회고가 없으면 둘 다 `null`. `satisfaction`은 §0 enum(`HIGH` · `LOW` · `UNKNOWN`) |
+| `totalElements` | 필터를 적용한 총건수. `totalPages` = ⌈totalElements ÷ size⌉ |
 
 ### `GET /retrospects/candidates`
 
@@ -780,6 +827,44 @@
 지운 목표에 붙어 있던 채택 이력을 잃지 않기 위해서입니다 (E-83). 응답은 `{ "success": true }`입니다.
 
 ---
+
+### `GET /reports/monthly` (v2.14 본문 신설 — #17 · FR-08-06 P0 · FR-08-07 · E-94)
+
+**Request** — Query
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| `yearMonth` | `YYYY-MM` · optional | **분석 기준월** (`GET /users/me`의 `analysisYearMonth`, E-60) | 미래 달(현재 KST 연월보다 뒤)은 400 |
+
+> **확정 규칙 (E-94).** `yearMonth`가 **지난달 이전**이면 첫 조회 때 계산해 `monthly_snapshots`에 저장하고 이후 그 값을 그대로 돌려줍니다 — 확정된 달은 회고를 더 해도 다시 계산하지 않습니다. **이번 달**이면 매번 계산하고 저장하지 않습니다(`finalized: false`). 스케줄러는 없습니다.
+> **목표 실적.** 지난달이 확정되는 그 요청에서 `savedAmount > 0`이면 `ADOPTED` 제안이 붙은 목표에 `expectedSaving` 비율로 배분해 `Goal.currentAmount`에 더합니다(04 §3). 그때부터 `GET /goals`의 `achievementRate`가 움직입니다. 채택 자체는 여전히 `currentAmount`를 바꾸지 않습니다(E-82).
+> **데이터 없는 달도 200**입니다 — `totalSpending` 0, 전월이 없으면 `savedAmount` · `previousTotalSpending` · `previousRepeatCount`는 `null`.
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "yearMonth": "2026-08",
+    "finalized": true,
+    "totalSpending": 412000,
+    "previousTotalSpending": 448000,
+    "savedAmount": 36000,
+    "unsatisfiedCount": 4,
+    "repeatCount": 3,
+    "previousRepeatCount": 5,
+    "goalAllocations": [{ "goalId": 3, "amount": 36000 }]
+  }
+}
+```
+
+| 필드 | 산식 (04 §3 · E-94) |
+|---|---|
+| `totalSpending` | 그 달 거래 금액 합 |
+| `savedAmount` | `previousTotalSpending − totalSpending`. **음수 허용**(더 쓴 달). 예산 · 판정과 무관 |
+| `unsatisfiedCount` | 그 달 거래의 회고 중 `LOW` 건수 (FR-08-07) |
+| `repeatCount` · `previousRepeatCount` | 유효 묶음 ∧ RESOLVED ∧ ADJUST 묶음의 그 달 거래 건수 합 (FR-08-07 반복 횟수 변화) |
+| `goalAllocations` | 이 요청에서 확정 · 배분이 일어났을 때만 채워진다. 그 외에는 빈 배열 |
 
 ### `PUT /users/me/settings` (v2.5 본문 신설 — #3 · FR-01-03,04,06)
 
