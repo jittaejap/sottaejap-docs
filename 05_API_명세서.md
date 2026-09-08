@@ -1,6 +1,13 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.10 | **기준일:** 2026-09-08 | **Base URL:** `______`
+**버전:** v2.11 | **기준일:** 2026-09-08 | **Base URL:** `______`
+
+> **v2.11 변경 (2026-09-08 — state 중첩 키 표기):** §3 `task_context.state`의 키는 **중첩 객체까지 snake_case**입니다.
+> E-24가 정한 "`/chat` 경계는 snake_case"의 적용 범위를 밝히는 것이라 **계약을 새로 정하지 않습니다.** 종전에는
+> `by_verdict[]` · `by_category[]`까지만 규정하고 그 안쪽 키를 적지 않아, Spring이 집계 record를 그대로 실으면
+> `monthlyTotalAmount`처럼 camelCase가 섞여 나갔습니다. `ANALYSIS_NARRATE` 항목 키를 이름까지 적습니다 —
+> 06 R19(AI의 `analysis_narrate` 숫자 가드)가 이 키로 값을 읽습니다. server `fe2eb86`이 이 모양으로 보냅니다
+> (server PR #16 리뷰).
 
 > **v2.10 변경 (2026-09-08 — 질문 길이 상한 · 알림 푸시 경로):** §2 `POST /chat/finance`의 `message`에 **1~500자** 상한을 둡니다.
 > 같은 프롬프트에 `recent_messages` 6건이 함께 실리므로(§3), 상한이 없으면 붙여넣기 한 번에 그 예산이 통째로 무너집니다.
@@ -1000,7 +1007,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 |---|---|
 | `task_context.task` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / **`CLUSTER_NAMING`** / **`ANALYSIS_NARRATE`** / **`FINANCE_QA`** — `CLUSTER_NAMING`·`ANALYSIS_NARRATE`는 v1.3에서 문서가 정의, **v1.6 레포 반영 완료** (06 R4). `FINANCE_QA`는 v1.8 신설 (E-47) |
 | `task_context.status` | `ACTIVE` / `PAUSED` / `COMPLETED` — Spring이 소유. AI는 바꾸지 않는다 |
-| `task_context.state` | 작업별 구조화 상태 (아래 표). **레포는 `dict`로 받으므로 구조는 이 문서가 정본** |
+| `task_context.state` | 작업별 구조화 상태 (아래 표). **레포는 `dict`로 받으므로 구조는 이 문서가 정본** / 키는 **중첩 객체까지 snake_case**입니다 (E-24 · v2.11) — Spring은 record·엔티티를 그대로 싣지 않고 키를 옮겨 담습니다 |
 | `recent_messages` | 최소 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화다 (E-87). 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION`은 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67) |
 | `tool_results[].data` | 회고 후보(①)의 `purpose`·`companion`은 **표준 태그 또는 `null`** 이어야 한다. 자유 문자열이면 Spring이 버린다 (E-20) |
 | `needs_clarification` | `true`면 클라이언트는 `uncertain_fields`만 선택지 버튼으로 되묻는다 (FR-04-08) |
@@ -1014,7 +1021,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `ANALYSIS` | `analysis_year_month` (집계는 AI가 `/internal/ai/…/analysis`로 pull) | 사용자 질문에 대한 설명 |
 | `ACTION_PLAN` | `suggestion_ids[]` (상세는 pull) | 제안 이유 문장 (FR-08-01) |
 | `CLUSTER_NAMING` | `cluster_key` · `sample_merchants[]` · `tx_count` | 묶음 이름 1개, 12자 이내 (⑤ · FR-05-05) |
-| `ANALYSIS_NARRATE` | `by_verdict[]` · `by_category[]` (Spring 집계값) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지** |
+| `ANALYSIS_NARRATE` | `analysis_year_month` · `by_verdict[]` · `by_category[]` (Spring 집계값). **항목 키 (v2.11)** — `by_verdict[]`는 `verdict` · `cluster_count` · `monthly_total_amount` · `share`, `by_category[]`는 `category` · `dominant_time_slot` · `avg_amount` · `monthly_total_amount` · `verdict`. `pending`은 싣지 않습니다 (E-75) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지** |
 | `FINANCE_QA` | (거의 없음 — 빈 객체 `{}`) | 근거 기반 답변 문장. 출처는 문장에 자연스럽게 언급, 별도 필드 없음 (⑪ · FR-12 · v1.8 — E-47) |
 
 > `reason_code`·집계값은 항상 Spring이 `state`에 실어 보냅니다. AI가 `reason_code` 없이 이유를 만드는 경로는 없습니다 (NFR-02).
