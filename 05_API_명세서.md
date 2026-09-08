@@ -2,6 +2,8 @@
 
 **버전:** v2.9 | **기준일:** 2026-09-08 | **Base URL:** `______`
 
+> **v2.9 변경 (2026-09-08 — LLM 타임아웃 · E-88):** §3 `fallback` 조건과 AI → OpenAI 타임아웃 잠정값을 **8초에서 6초**로 조정했습니다. 재시도 1회를 포함한 최악 12초를 Spring `/chat` 15초 예산 안에 맞추며, 실제 회고 추출 프롬프트로 재확인해야 합니다.
+
 > **v2.9 변경 (2026-09-08 — 후보 조회 범위 명시):** §2 `GET /retrospects/candidates`는 **최신 100건 안에서** 규칙 ③④⑤를
 > 적용합니다. `limit`이 100을 넘으면 오류가 아니라 100으로 자릅니다. 응답 모양이 바뀌지 않으므로 계약 변경은 아닙니다.
 >
@@ -991,7 +993,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `recent_messages` | 최소 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화다 (E-87). 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION`은 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67) |
 | `tool_results[].data` | 회고 후보(①)의 `purpose`·`companion`은 **표준 태그 또는 `null`** 이어야 한다. 자유 문자열이면 Spring이 버린다 (E-20) |
 | `needs_clarification` | `true`면 클라이언트는 `uncertain_fields`만 선택지 버튼으로 되묻는다 (FR-04-08) |
-| **`fallback`** | **v1.3 추가.** LLM 8초 초과·오류로 템플릿 응답을 돌려줄 때 `true` (FR-04-15). **`OPENAI_API_KEY`가 비어 있을 때도 `true`** (E-38). 클라이언트는 템플릿 모드 배너를 띄운다 (S11) |
+| **`fallback`** | **v1.3 추가.** LLM 6초 초과·오류로 템플릿 응답을 돌려줄 때 `true` (FR-04-15 · E-88). **`OPENAI_API_KEY`가 비어 있을 때도 `true`** (E-38). 클라이언트는 템플릿 모드 배너를 띄운다 (S11) |
 
 **`task_context.state` — 작업별 구조 (문서 정본)**
 
@@ -1030,7 +1032,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 
 | 구간 | 타임아웃 | 재시도 | 실패 시 |
 |---|---|---|---|
-| AI → OpenAI | **8초** (⚠️ 잠정 — `LLM_TIMEOUT_SECONDS`) | 1회 | AI가 **템플릿 응답** + `fallback: true`, HTTP 200 유지. 템플릿은 레포 `app/ai/fallback.py` (문구 담당 오진호). 키 미설정도 같은 경로 (E-38) |
+| AI → OpenAI | **6초** (⚠️ 잠정 — `LLM_TIMEOUT_SECONDS`, E-88) | 1회 | AI가 **템플릿 응답** + `fallback: true`, HTTP 200 유지. 템플릿은 레포 `app/ai/fallback.py` (문구 담당 오진호). 키 미설정도 같은 경로 (E-38) |
 | AI → Spring 내부 API | 10초 (레포 `SPRING_TIMEOUT_SECONDS`) | 0회 | `tool_results[].success = false`, `reply`는 데이터 없이 진행 가능한 문장 |
 | Spring → AI `/chat` | **15초** (⚠️ 잠정 — 위 둘을 포함, `AI_TIMEOUT_MS`) | 0회 | Spring이 **템플릿 응답**을 직접 생성해 200, 또는 `LLM_UNAVAILABLE` 503 → 클라이언트 템플릿 모드 |
 
