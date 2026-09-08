@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.7 | **기준일:** 2026-09-07 | **담당:** 고현석
+**버전:** v2.8 | **기준일:** 2026-09-08 | **담당:** 고현석
 
+> **v2.8 변경 (2026-09-08):** **`ChatMessage` · `PushSubscription` 엔티티 2개 신설** (01 E-67 · E-68 각주 반영). 마이그레이션은 server **`V5__push_subscriptions.sql`** · **`V6__chat_messages.sql`**입니다. `ChatMessage`에 지금 쌓이는 것은 **금융 Q&A뿐**입니다 — 회고 대화는 클라이언트가 소유합니다 (E-67 · E-63). 조회 정렬은 `created_at DESC, id DESC`입니다 — 질문과 답변이 같은 `created_at`을 갖기 때문입니다 (E-87 · server PR #12 리뷰).
+>
 > **v2.7 변경 (2026-09-07):** `FinancialChunk` 마이그레이션을 **`V8__financial_chunks.sql`**로, `embedding`을 **`vector(1536)`**(`text-embedding-3-small`)로 확정했습니다 (01 E-85). 벡터 인덱스는 두지 않습니다. 종전의 `V3` · `vector(N)` 표기는 폐기입니다 — `V3`는 `V3__drop_card_issuer.sql`이 먼저 썼습니다. 다른 엔티티는 그대로입니다.
 >
 > **v2.2 변경 (2026-09-07):** 스키마 변경 없음(V5 없음). §3 산식에 **분모·null 정의**(01 E-61) · **롤업 상위 키 `카테고리|시간대||`**(E-59) · `analysisYearMonth` = **사용자의 최근 거래월**(E-60, 06 R11 종결)을 적었습니다. `BehaviorCluster.clusterKey`의 시간대 자리는 식사 목록(`rules.cluster.meal-categories`)이거나 **`기타`(미분류)일 때** 포함합니다 (E-58).
@@ -181,6 +183,40 @@
 | isRead | boolean | 기본 false |
 | createdAt | timestamp | |
 
+### ChatMessage (v2.8 신설 · **server `V6`** — E-67)
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| userId | FK → User | |
+| transactionId | FK → Transaction, **nullable** | 어느 거래에 대한 대화인지. **금융 Q&A는 null** |
+| role | enum | `USER` / `ASSISTANT` — AI 경계에서는 소문자다 (05 §3 `recent_messages[].role`) |
+| content | text | 오간 말 그대로. 서버가 요약·판정하지 않는다 |
+| createdAt | timestamp | |
+
+> **지금 쌓이는 것은 금융 Q&A(`transactionId` null)뿐입니다** (E-67). 회고 대화는 클라이언트가 소유합니다 —
+> `POST /retrospects/chat`이 상태 없는 프록시여서 `step`·확정값과 함께 `recentMessages`를 같이 보냅니다 (E-63).
+> 서버가 회고 이력을 갖게 되면 그때 `transactionId`를 씁니다.
+> AI에는 **최근 6건만** 싣습니다 — 전체 이력을 보내지 않습니다 (05 §3).
+> 인덱스는 `(user_id, transaction_id, created_at DESC, id DESC)`입니다. 질문과 답변이 **같은 `created_at`** 으로
+> 저장되므로 `id`까지 넣어야 정렬이 한 가지로 정해지고, 뒤집어 오름차순으로 실을 때 턴이 어긋나지 않습니다 (E-87).
+
+### PushSubscription (v2.8 신설 · **server `V5`** — E-68)
+
+| 필드 | 타입 | 비고 |
+|---|---|---|
+| id | PK | |
+| userId | FK → User | |
+| endpoint | text **UNIQUE** | 브라우저가 만든 구독 주소. **구독의 고유 식별자다** |
+| p256dh | string(255) | 브라우저 공개키 (`PushSubscription.toJSON().keys.p256dh`) |
+| auth | string(255) | 인증 시크릿 (같은 JSON의 `keys.auth`) |
+| createdAt | timestamp | |
+
+> 한 사용자가 **기기·브라우저마다 하나씩** 갖습니다. `endpoint`가 UNIQUE라 같은 endpoint로 다른 사용자가
+> 구독하면 행을 늘리지 않고 **소유자를 옮깁니다** — 같은 브라우저에 다른 계정이 로그인한 경우로 봅니다.
+> 푸시 서비스가 `410`·`404`를 돌려주면 그 행을 지웁니다 — 다시 보내도 영영 실패하는 구독입니다.
+> 서버가 갖는 VAPID 키 3종은 스키마가 아니라 환경 변수입니다 (07 §3).
+
 ### FinancialChunk (v1.3 신설 · **v2.7 적용 — server `V8`** — E-21·E-22·**E-85**)
 
 | 필드 | 타입 | 비고 |
@@ -206,8 +242,11 @@ User 1 ── N BehaviorCluster
 User 1 ── N Goal
 User 1 ── N MonthlySnapshot
 User 1 ── N Notification
+User 1 ── N ChatMessage
+User 1 ── N PushSubscription
 
 Transaction 1 ── 0..1 Retrospect      (transactionId UNIQUE)
+Transaction 1 ── N ChatMessage        (transactionId nullable — 금융 Q&A는 null)
 Transaction N ── 1 BehaviorCluster
 
 BehaviorCluster 1 ── N Suggestion
