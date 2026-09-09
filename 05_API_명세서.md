@@ -1,6 +1,8 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.22 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.23 | **기준일:** 2026-09-09 | **Base URL:** `______`
+
+> **v2.23 변경 (2026-09-09 — 제안 `reason` 문구의 조사 제거 · 묶음 이름 12자 기준):** §2 `GET /suggestions`의 `reason` 문구 3종에서 묶음 이름 뒤의 `은(는)`을 **쉼표로 바꿉니다** — 이름은 AI가 짓기 때문에 숫자 · 영문 · 이모지로 끝날 수 있어 종성 판별로도 폴백이 남고, 이 저장소의 다른 사용자 문구(알림 · `highlight`)는 이미 문장 구조로 조사를 피합니다. 문장의 나머지는 그대로이고 DTO · 키 · 봉투도 그대로입니다(계약 변경 아님 · 07 §6 절차 없음). **문구는 잠정**이며 문구 담당 확인 뒤 확정합니다. §3 `CLUSTER_NAMING`의 "12자 이내"는 **코드 포인트 기준**임을 적습니다 — 서버가 UTF-16 코드 단위로 잘라 이모지가 반으로 끊기던 것을 닫습니다. server 이슈 #20.
 
 > **v2.22 변경 (2026-09-09 — 표준 태그 표기 정규화):** §2 `POST /retrospects` · `POST /retrospects/chat`이 `purpose`·`companion`을 **공백을 지워 대조하고 정본 표기로 되돌려 저장**합니다 (01 v2.20 E-99). 화면 문구 `"휴식 · 취미"`가 400 `INVALID_TAG`로 막혀 온보딩을 끝낼 수 없던 것을 닫습니다. 표준 태그 목록은 그대로이고, 공백을 지워도 태그가 아니면 여전히 400입니다. server 이슈 #38 · PR #41.
 >
@@ -751,7 +753,7 @@
       "expectedSaving": 96000,
       "goalId": null,
       "status": "PROPOSED",
-      "reason": "심야 배달은(는) 이번 달 96,000원으로 부담이 컸고 만족도도 낮았어요. 횟수를 줄여볼까요?"
+      "reason": "심야 배달, 이번 달 96,000원으로 부담이 컸고 만족도도 낮았어요. 횟수를 줄여볼까요?"
     }]
   }
 }
@@ -765,16 +767,19 @@
 > `adjustCount`는 제안 시점에 `txCount`이고 채택할 때 사용자가 고칩니다.
 > `reason`은 **Spring 템플릿 3종**입니다 — AI를 부르지 않으므로 `ai` 컨테이너가 내려가도 목록이 그대로 뜹니다 (E-38 · E-84).
 
-**`reason` 문구 3종 (E-84)** — `quadrant`로 고릅니다. 클라이언트는 이 문장을 하드코딩하지 말고 응답을 그대로 씁니다.
+**`reason` 문구 3종 (E-84 · v2.23 잠정 문구)** — `quadrant`로 고릅니다. 클라이언트는 이 문장을 하드코딩하지 말고 응답을 그대로 씁니다.
 
 | `quadrant` | 문구 |
 |---|---|
-| `PRIORITY` | `{묶음 이름}은(는) 이번 달 {monthlyTotalAmount}원으로 부담이 컸고 만족도도 낮았어요. 횟수를 줄여볼까요?` |
-| `MINOR` | `{묶음 이름}은(는) 부담이 크진 않지만 만족도가 낮았어요. 조금만 줄여볼까요?` |
-| `null` (예산 없음) | `{묶음 이름}은(는) 만족도가 낮았어요. 몇 번만 줄여볼까요?` |
+| `PRIORITY` | `{묶음 이름}, 이번 달 {monthlyTotalAmount}원으로 부담이 컸고 만족도도 낮았어요. 횟수를 줄여볼까요?` |
+| `MINOR` | `{묶음 이름}, 부담이 크진 않지만 만족도가 낮았어요. 조금만 줄여볼까요?` |
+| `null` (예산 없음) | `{묶음 이름}, 만족도가 낮았어요. 몇 번만 줄여볼까요?` |
 
 > 금액은 천 단위 구분 쉼표를 넣습니다(`96,000`). **좌표를 모르면 부담을 언급하지 않습니다** — 모르는 것을
 > "크지 않다"고 말할 수 없습니다 (NFR-02). 위 `GET /suggestions` 예시 응답의 `reason`도 `PRIORITY` 문구입니다.
+> **묶음 이름 뒤에 조사를 붙이지 않습니다** (v2.23 · server #20) — 이름은 AI가 짓기 때문에(⑤ · E-64) 숫자 · 영문 · 이모지로
+> 끝날 수 있어 종성 판별로도 `은(는)` 폴백이 남습니다. 쉼표로 끊어 문장 구조로 피합니다. `highlight`의 `"이번 달 {카테고리}에 …원을 썼고"`와
+> 문형이 다릅니다 — 그쪽은 **카테고리 전체 합계**, 여기는 **`ADJUST` 묶음 하나의 월 합계**라 같은 금액을 두 번 쓴 것으로 읽히면 안 됩니다.
 
 ---
 
@@ -1234,7 +1239,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `REFLECTION` | `transaction` · `reason_code` · `reflection`(현재까지 확정값) · `step`(enum `reflectionStep` — v2.3 · E-69) | 다음 질문 또는 확인 문장. `INTRO`에서는 `reason_code` 재구성 설명 (FR-04-10·11) |
 | `ANALYSIS` | `analysis_year_month` (집계는 AI가 `/internal/ai/…/analysis`로 pull) | 사용자 질문에 대한 설명 |
 | `ACTION_PLAN` | `suggestion_ids[]` (상세는 pull) | 제안 이유 문장 (FR-08-01) |
-| `CLUSTER_NAMING` | `cluster_key` · `sample_merchants[]` · `tx_count` | 묶음 이름 1개, 12자 이내 (⑤ · FR-05-05) |
+| `CLUSTER_NAMING` | `cluster_key` · `sample_merchants[]` · `tx_count` | 묶음 이름 1개, 12자 이내 (⑤ · FR-05-05). **12자는 유니코드 코드 포인트로 셉니다** (v2.23 · server #20) — 이모지 하나가 1자이고, 넘치면 서버가 코드 포인트 경계에서 자릅니다 |
 | `ANALYSIS_NARRATE` | `analysis_year_month` · `by_verdict[]` · `by_category[]` (Spring 집계값). **항목 키 (v2.11)** — `by_verdict[]`는 `verdict` · `cluster_count` · `monthly_total_amount` · `share`, `by_category[]`는 `category` · `dominant_time_slot` · `avg_amount` · `monthly_total_amount` · `verdict`. `pending`은 싣지 않습니다 (E-75) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지** |
 | `FINANCE_QA` | (거의 없음 — 빈 객체 `{}`) | 근거 기반 답변 문장. 출처는 문장에 자연스럽게 언급, 별도 필드 없음 (⑪ · FR-12 · v1.8 — E-47) |
 
