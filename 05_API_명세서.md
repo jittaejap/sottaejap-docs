@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.38 | **기준일:** 2026-09-10 | **Base URL:** `______`
+**버전:** v2.39 | **기준일:** 2026-09-10 | **Base URL:** `______`
 
+> **v2.39 변경 (2026-09-10 — AI → Spring 타임아웃 정정 · E-116):** §3 타임아웃 표의 **AI → Spring 내부 API**를 10초에서 **3초**로 정정합니다(01 v2.42 **E-116** · `sottaejap-ai` #65 · PR #70). Spring → AI `/chat` 15초 예산 안에서 `ANALYSIS`·`ACTION_PLAN` 최악 경로(Spring Tool 1회 + LLM 1회·재시도 포함 최대 2회)가 `3 + 6 × 2 = 15`초로 정확히 맞습니다(여유 없음) — 10초였을 때는 `10 + 12 = 22`초로 예산을 넘겼습니다. 계약(요청·응답 모양)은 바뀌지 않습니다.
+>
 > **v2.38 변경 (2026-09-10 — 사용자 기준 금액):** §2 `PUT /users/me/settings` 요청과 `GET /users/me` 응답에 **`outlierBaseAmount`**를 더합니다 — **큰 금액 후보 판정(`THRESHOLD_EXCEEDED`)의 원 단위 기준 금액**이고 **선택 항목**입니다 (01 v2.41 **E-115** · 04 v2.17 · server #74 · client #33). `outlierThreshold`(이상치 배수 · E-46)와 **다른 값입니다** — 배수는 규칙 ④ `TIMESLOT_OUTLIER`에, 이 금액은 규칙 ③에 쓰입니다. **`null`은 "그대로 두기"** 이고 **넷이 전부 비면 400**은 그대로입니다. 0 이하는 **400 `INVALID_INPUT`**이며 새 오류 코드는 없습니다. 값이 있으면 규칙 ③이 예산 비율 대신 이 금액을 보고, **예산이 없어도 판정이 열립니다**. 기존 사용자는 값이 `null`이고 지금 배포된 client가 이 필드를 보내지 않으므로 **화면이 깨질 일은 없습니다**.
 >
 > **v2.37 변경 (2026-09-09 — 목표 달성 예정일):** §2 #4 · #5의 목표 계약에 **`targetDate`**를 더합니다 — `POST /goals` · `PUT /goals/{id}` 요청의 **선택 항목**이고 `GET /goals` 응답에 함께 옵니다. 형식은 **`YYYY-MM-DD`**입니다 (01 v2.39 **E-114** · 04 v2.16 · server #71 · client PR #28). **이름은 `targetDate`로 고정합니다** — client 내부 이름은 `goalDueDate`지만 계약 이름이 갈라지면 서버가 모르는 필드를 400도 없이 조용히 버립니다. **`PUT`에서 생략하면 유지**합니다 — `currentAmount`에 이은 "생략하면 유지"의 두 번째 사례이고, 이유는 실적이라서가 아니라 **지금 배포된 마이페이지가 이 값을 보내지 않아서**입니다. `@Future` 같은 값 검증은 두지 않고 형식만 봅니다 — 틀리면 **400 `INVALID_INPUT`**이고 새 오류 코드는 없습니다. 기존 목표는 값이 `null`이고 client가 아직 이 필드를 보내지 않으므로 **지금 화면이 깨질 일은 없습니다**.
@@ -1383,7 +1385,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | 구간 | 타임아웃 | 재시도 | 실패 시 |
 |---|---|---|---|
 | AI → OpenAI | **6초** (⚠️ 잠정 — `LLM_TIMEOUT_SECONDS`, E-88) | 1회 | AI가 **템플릿 응답** + `fallback: true`, HTTP 200 유지. 템플릿은 레포 `app/ai/fallback.py` (문구 담당 오진호). 키 미설정도 같은 경로 (E-38) |
-| AI → Spring 내부 API | 10초 (레포 `SPRING_TIMEOUT_SECONDS`) | 0회 | `tool_results[].success = false`, `reply`는 데이터 없이 진행 가능한 문장 |
+| AI → Spring 내부 API | **3초** (레포 `SPRING_TIMEOUT_SECONDS` · E-116) | 0회 | `tool_results[].success = false`, `reply`는 데이터 없이 진행 가능한 문장 |
 | Spring → AI `/chat` | **15초** (⚠️ 잠정 — 위 둘을 포함, `AI_TIMEOUT_MS`) | 0회 | Spring이 **템플릿 응답**을 직접 생성해 200, 또는 `LLM_UNAVAILABLE` 503 → 클라이언트 템플릿 모드 |
 
 > P0 회고 경로(선택지 버튼)는 LLM 없이 완주합니다. 폴백은 P1 자연어 경로와 ⑤⑥⑨ 표현 계층에만 걸립니다.
