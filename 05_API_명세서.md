@@ -1,6 +1,8 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.24 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.25 | **기준일:** 2026-09-09 | **Base URL:** `______`
+
+> **v2.25 변경 (2026-09-09 — `ANALYSIS_NARRATE` 숫자 가드 예외 범위):** §3 숫자 가드는 한 자릿수 정수라도 바로 뒤에 `%`가 붙으면 반드시 집계 근거와 대조합니다. `analysis_year_month`의 정상 연도·월은 허용 숫자로 봅니다(01 v2.23 E-101). DTO · enum · 엔드포인트 변경은 없습니다. `sottaejap-ai` PR #43 리뷰.
 
 > **v2.24 변경 (2026-09-09 — 제안 `reason` 문구 확정):** §2 `GET /suggestions`의 `reason` 3종을 **확정**합니다 — v2.23의 쉼표형(`{묶음 이름}, …`)은 이름이 호격처럼 읽혀, **이름 뒤에는 받침과 무관한 조사(`의` · `에`)만 쓴다**로 규칙을 바꿉니다. `PRIORITY`는 `{묶음 이름}의 이번 달 지출이 …원이에요.`로 열어 `highlight`의 `"이번 달 {카테고리}에 …원을 썼고"`(카테고리 합계)와 문형을 가릅니다. 잠정 표기를 뗍니다. server PR #44 리뷰(문구 담당 확정).
 
@@ -1242,7 +1244,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `ANALYSIS` | `analysis_year_month` (집계는 AI가 `/internal/ai/…/analysis`로 pull) | 사용자 질문에 대한 설명 |
 | `ACTION_PLAN` | `suggestion_ids[]` (상세는 pull) | 제안 이유 문장 (FR-08-01) |
 | `CLUSTER_NAMING` | `cluster_key` · `sample_merchants[]` · `tx_count` | 묶음 이름 1개, 12자 이내 (⑤ · FR-05-05). **12자는 유니코드 코드 포인트로 셉니다** (v2.23 · server #20) — 이모지 하나가 1자이고, 넘치면 서버가 코드 포인트 경계에서 자릅니다 |
-| `ANALYSIS_NARRATE` | `analysis_year_month` · `by_verdict[]` · `by_category[]` (Spring 집계값). **항목 키 (v2.11)** — `by_verdict[]`는 `verdict` · `cluster_count` · `monthly_total_amount` · `share`, `by_category[]`는 `category` · `dominant_time_slot` · `avg_amount` · `monthly_total_amount` · `verdict`. `pending`은 싣지 않습니다 (E-75) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지** |
+| `ANALYSIS_NARRATE` | `analysis_year_month` · `by_verdict[]` · `by_category[]` (Spring 집계값). **항목 키 (v2.11)** — `by_verdict[]`는 `verdict` · `cluster_count` · `monthly_total_amount` · `share`, `by_category[]`는 `category` · `dominant_time_slot` · `avg_amount` · `monthly_total_amount` · `verdict`. `pending`은 싣지 않습니다 (E-75) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지.** 한 자릿수 정수 예외는 `%`가 바로 뒤에 붙지 않은 경우만이고, 정상 `analysis_year_month`의 연도·월은 근거로 인정합니다(E-79 · E-101) |
 | `FINANCE_QA` | (거의 없음 — 빈 객체 `{}`) | 근거 기반 답변 문장. 출처는 문장에 자연스럽게 언급, 별도 필드 없음 (⑪ · FR-12 · v1.8 — E-47) |
 
 > `reason_code`·집계값은 항상 Spring이 `state`에 실어 보냅니다. AI가 `reason_code` 없이 이유를 만드는 경로는 없습니다 (NFR-02).
