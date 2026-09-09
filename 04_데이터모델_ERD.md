@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.11 | **기준일:** 2026-09-09 | **담당:** 고현석
+**버전:** v2.12 | **기준일:** 2026-09-09 | **담당:** 고현석
 
+> **v2.12 변경 (2026-09-09):** §1 `Goal` — **`PUT /goals/{id}`는 바뀐 컬럼만 쓴다**(`@DynamicUpdate`, 01 v2.21 E-100). `currentAmount`를 생략한 수정이 SQL에 `current_amount`를 싣지 않아, 월간 리포트 확정의 실적 배분과 겹쳐도 옛 값으로 덮지 않습니다. 스키마 변경 없음.
+>
 > **v2.11 변경 (2026-09-09):** §3 `MonthlySnapshot` — **실적 배분은 직전 달(현재 연월 − 1) 확정에서만**, 확정된 달의 **전월 값은 저장된 `savedAmount`에서 역산**하고 `previousRepeatCount`는 전월 스냅샷 값 또는 null, **첫 거래월 이전 달은 저장하지 않는다** (01 v2.17 E-94 ③④⑤ 보강 · server PR #32 리뷰). 스키마 변경 없음.
 >
 > **v2.10 변경 (2026-09-09):** §3에 **`MonthlySnapshot` 산식 4종과 확정 규칙**(01 E-94) · **`Goal.currentAmount` 실적 배분** 규칙을 추가합니다. 스키마 변경 없음 — `monthly_snapshots`는 V1 그대로입니다. `savedAmount`는 전체 지출 차(음수 허용), 지난달은 첫 조회 때 확정, 이번 달은 저장하지 않습니다.
@@ -145,7 +147,7 @@
 | userId | FK → User | |
 | name | string | 비상금 / 독립 / 여행 |
 | targetAmount | int | |
-| currentAmount | int | **실적**. 채택은 이 값을 바꾸지 않는다 (v2.6 — E-82). **지난달 스냅샷이 확정될 때 `savedAmount > 0`을 `ADOPTED` 제안이 붙은 목표에 `expectedSaving` 비율로 배분해 더한다** (v2.10 — E-94) |
+| currentAmount | int | **실적**. 채택은 이 값을 바꾸지 않는다 (v2.6 — E-82). **지난달 스냅샷이 확정될 때 `savedAmount > 0`을 `ADOPTED` 제안이 붙은 목표에 `expectedSaving` 비율로 배분해 더한다** (v2.10 — E-94). **`PUT /goals/{id}`는 바뀐 컬럼만 쓴다** — `currentAmount`를 생략하면 SQL에 싣지 않아 배분과 겹쳐도 덮지 않는다 (v2.12 — E-100) |
 | deletedAt | timestamp | v1.2 추가 — soft delete (FR-01-02 삭제). 지워도 `suggestions.goalId`는 남는다 (E-83) |
 
 ### Suggestion
