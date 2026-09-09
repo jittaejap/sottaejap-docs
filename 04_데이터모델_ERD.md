@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.16 | **기준일:** 2026-09-09 | **담당:** 고현석
+**버전:** v2.17 | **기준일:** 2026-09-10 | **담당:** 고현석
 
+> **v2.17 변경 (2026-09-10):** §1 `User`에 **`outlierBaseAmount`**(int · nullable · `V11`)를 더합니다 — **큰 금액 후보 판정(`THRESHOLD_EXCEEDED`)의 원 단위 기준 금액**입니다 (01 v2.41 **E-115** · server #74 · client #33). `outlierThreshold`(이상치 배수 · E-46)와 **다른 값이고 쓰이는 규칙도 다릅니다** — 배수는 규칙 ④ `TIMESLOT_OUTLIER`, 이 금액은 규칙 ③입니다. **선택 항목이고 기존 행은 백필하지 않습니다** — 지금 배포된 온보딩이 이 값을 보내지 않아 채울 근거가 없습니다. `PUT /users/me/settings`에서 **생략하면 유지**합니다. 값이 있으면 예산 비율 폴백보다 먼저 봅니다.
+>
 > **v2.16 변경 (2026-09-09):** §1 `Goal`에 **`targetDate`**(date · nullable · `V10`)를 더합니다 — 목표 달성 예정일입니다 (01 v2.39 **E-114** · server #71 · client PR #28). **선택 항목이고 기존 행은 백필하지 않습니다** — 지금 배포된 온보딩이 이 값을 보내지 않아 채울 근거가 없습니다. `PUT /goals/{id}`에서 **생략하면 유지**합니다(`currentAmount`에 이은 두 번째 사례). 서버는 이 날짜로 아무것도 계산하지 않습니다 — D-day · 월 필요 저축액은 화면 몫입니다.
 >
 > **v2.15 변경 (2026-09-09):** §4의 카테고리 문단을 **구현 사실에 맞춥니다** — 매핑표(FR-02-03) 전까지 `category`와 `sourceCategory`는 **둘 다 카드사 원본**입니다(server `TransactionServiceImpl.category()`, 06 **R29**). §1의 `category` = 내부 통합 카테고리는 매핑표가 들어온 뒤의 뜻입니다. 매핑표 반영은 변환 한 줄이 아니라 기존 행 백필 마이그레이션 1회 + 전체 묶음 재계산 1회(E-58)까지가 한 묶음입니다.
@@ -85,6 +87,7 @@
 | providerUserId | string | v1.2 추가 — SNS 계정 식별자(카카오 `id`), nullable. **`(authProvider, providerUserId)` 유일** — `providerUserId IS NOT NULL`인 행에만 (V1 `uq_users_provider` · E-56) |
 | monthlyBudget | int | **지출 부담 분모** |
 | outlierThreshold | float | 이상치 탐지 임계값 (사용자 설정) |
+| outlierBaseAmount | int | v2.17 추가 — **큰 금액 기준 금액(원)**, nullable (E-115 · `V11`). 규칙 ③ `THRESHOLD_EXCEEDED`가 예산 비율보다 **먼저** 본다. 없으면 `monthlyBudget × rules.candidate.big-amount-budget-ratio`로 돌아간다. 백필 없음 · 마이페이지에서 수정, 생략하면 유지 |
 | avgSatisfaction | float | 전체 평균 — 축소 추정용 캐시 |
 | retrospectDelayDays | int | 기본 **1** (D+1 — 결정로그 B-1) |
 | onboardingCompleted | boolean | 온보딩 5단계 완료 플래그 (최초 진입 분기 — FR-09-03) |

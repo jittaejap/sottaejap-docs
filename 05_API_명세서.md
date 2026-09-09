@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.37 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.38 | **기준일:** 2026-09-10 | **Base URL:** `______`
 
+> **v2.38 변경 (2026-09-10 — 사용자 기준 금액):** §2 `PUT /users/me/settings` 요청과 `GET /users/me` 응답에 **`outlierBaseAmount`**를 더합니다 — **큰 금액 후보 판정(`THRESHOLD_EXCEEDED`)의 원 단위 기준 금액**이고 **선택 항목**입니다 (01 v2.41 **E-115** · 04 v2.17 · server #74 · client #33). `outlierThreshold`(이상치 배수 · E-46)와 **다른 값입니다** — 배수는 규칙 ④ `TIMESLOT_OUTLIER`에, 이 금액은 규칙 ③에 쓰입니다. **`null`은 "그대로 두기"** 이고 **넷이 전부 비면 400**은 그대로입니다. 0 이하는 **400 `INVALID_INPUT`**이며 새 오류 코드는 없습니다. 값이 있으면 규칙 ③이 예산 비율 대신 이 금액을 보고, **예산이 없어도 판정이 열립니다**. 기존 사용자는 값이 `null`이고 지금 배포된 client가 이 필드를 보내지 않으므로 **화면이 깨질 일은 없습니다**.
+>
 > **v2.37 변경 (2026-09-09 — 목표 달성 예정일):** §2 #4 · #5의 목표 계약에 **`targetDate`**를 더합니다 — `POST /goals` · `PUT /goals/{id}` 요청의 **선택 항목**이고 `GET /goals` 응답에 함께 옵니다. 형식은 **`YYYY-MM-DD`**입니다 (01 v2.39 **E-114** · 04 v2.16 · server #71 · client PR #28). **이름은 `targetDate`로 고정합니다** — client 내부 이름은 `goalDueDate`지만 계약 이름이 갈라지면 서버가 모르는 필드를 400도 없이 조용히 버립니다. **`PUT`에서 생략하면 유지**합니다 — `currentAmount`에 이은 "생략하면 유지"의 두 번째 사례이고, 이유는 실적이라서가 아니라 **지금 배포된 마이페이지가 이 값을 보내지 않아서**입니다. `@Future` 같은 값 검증은 두지 않고 형식만 봅니다 — 틀리면 **400 `INVALID_INPUT`**이고 새 오류 코드는 없습니다. 기존 목표는 값이 `null`이고 client가 아직 이 필드를 보내지 않으므로 **지금 화면이 깨질 일은 없습니다**.
 >
 > **v2.36 변경 (2026-09-09 — 회고 대화 `message` 상한):** §2 #11 `POST /retrospects/chat`의 `message`에 **최대 500자**를 둡니다 — #24 · #28과 같은 값이고 이유도 같습니다(프롬프트 예산 — 같은 요청에 최근 대화 6건이 함께 실립니다). 넘으면 **400 `INVALID_INPUT`**이고 서버는 AI를 부르지 않습니다. `INTRO` 생략 규칙과 `recentMessages` 항목 규칙(E-109 · E-110)은 그대로이며 새 오류 코드는 없습니다 (01 v2.35 **E-112** · server #67).
@@ -301,6 +303,7 @@
     "authProvider": "LOCAL",
     "monthlyBudget": 1200000,
     "outlierThreshold": 1.5,
+    "outlierBaseAmount": 150000,
     "retrospectDelayDays": 1,
     "onboardingCompleted": false,
     "analysisYearMonth": "2026-08"
@@ -310,6 +313,7 @@
 
 > 클라이언트는 `onboardingCompleted == false`이면 **2-1 온보딩**, `true`이면 **3-1 홈**으로 진입합니다.
 > `email`은 v2.1부터 **nullable**입니다 (E-56) — 카카오 계정이 이메일 동의를 거부하면 `null`. 화면에서 이메일을 필수로 그리지 마십시오.
+> `outlierBaseAmount`는 v2.38 신설 (E-115) — **큰 금액 기준 금액(원)**. 사용자가 정하지 않았으면 `null`이고, 그때 서버는 `monthlyBudget × rules.candidate.big-amount-budget-ratio`로 판정합니다. 화면은 `null`을 "직접 설정 안 함"으로 그리십시오 — 0으로 대체하지 마십시오.
 > `nickname`은 v2.1 신설 (E-56) — 마이페이지 `1. 프로필`의 표시 이름. 카카오 닉네임을 저장하고, 데모 계정은 `데모 사용자`. nullable이며 `null`이면 클라이언트가 `사용자`로 표시합니다.
 > ⚠️ **갭 (v1.5):** `analysisYearMonth`는 04 `User` 엔티티에 없고 산출 규칙(최근 거래월? 사용자 설정?)이 미정입니다. 서버는 확정 전까지 `null`을 내려줍니다 — 액션시트에 결정 항목으로 올립니다.
 
@@ -423,7 +427,7 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 > **v2.9:** 다만 규칙 ③④⑤는 **최신 100건 안에서** 고릅니다 — 쿼리는 날짜 조건만 알고 규칙은 모르므로 넉넉히 100건을
 > 읽고 규칙을 적용한 뒤 `limit`으로 자릅니다. 최신 100건에 매칭이 하나도 없으면 후보는 0건입니다. 더 오래된 거래를
 > 보려면 `from`·`to`로 범위를 지정합니다. `limit`이 100을 넘으면 400이 아니라 100으로 자릅니다.
-> **v2.2 (E-62):** 이미 회고가 있는 거래는 제외합니다. `limit` 상한은 **100**, 정렬은 최신순. 한 거래에 여러 규칙이 맞으면 `THRESHOLD_EXCEEDED` > `TIMESLOT_OUTLIER` > `REPEATED_LOW_SATISFACTION` 순으로 하나만 씁니다. 선별 수치는 §3 `rules.candidate.*` 잠정값(E-57)이고, 이상치 배수는 `User.outlierThreshold`(없으면 `rules.sensitivity.standard`)입니다.
+> **v2.2 (E-62):** 이미 회고가 있는 거래는 제외합니다. `limit` 상한은 **100**, 정렬은 최신순. 한 거래에 여러 규칙이 맞으면 `THRESHOLD_EXCEEDED` > `TIMESLOT_OUTLIER` > `REPEATED_LOW_SATISFACTION` 순으로 하나만 씁니다. 선별 수치는 §3 `rules.candidate.*` 잠정값(E-57)이고, 이상치 배수는 `User.outlierThreshold`(없으면 `rules.sensitivity.standard`)입니다. **큰 금액 기준(`THRESHOLD_EXCEEDED`)은 `User.outlierBaseAmount`(원)가 있으면 그것이고, 없으면 `monthlyBudget × rules.candidate.big-amount-budget-ratio`입니다** (v2.38 · E-115).
 
 **Response 200**
 ```json
@@ -966,21 +970,26 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 
 **Request**
 ```json
-{ "monthlyBudget": 1000000, "outlierThreshold": 2.0, "retrospectDelayDays": 1 }
+{ "monthlyBudget": 1000000, "outlierThreshold": 2.0, "outlierBaseAmount": 150000, "retrospectDelayDays": 1 }
 ```
 
 | 필드 | 규칙 |
 |---|---|
 | `monthlyBudget` | 1 이상. **지출 부담의 분모**입니다 (FR-06-06) — 이 값이 없으면 지도의 가로축이 서지 않습니다 |
 | `outlierThreshold` | 0 초과. 이상치 민감도 배수 (E-46) |
+| `outlierBaseAmount` | 1 이상(원 단위 정수). **큰 금액 기준 금액** (E-115) — 규칙 ③ `THRESHOLD_EXCEEDED`가 예산 비율보다 **먼저** 봅니다. 배수(`outlierThreshold`)와 다른 값입니다 |
 | `retrospectDelayDays` | 0~30. 회고 알림까지 기다리는 날 수 (D+N) |
 
-> 세 값 모두 선택이고 **`null`은 "그대로 두기"** 입니다. 다만 셋이 전부 비면 **400 `INVALID_INPUT`** 입니다 —
+> 네 값 모두 선택이고 **`null`은 "그대로 두기"** 입니다. 다만 넷이 전부 비면 **400 `INVALID_INPUT`** 입니다 —
 > 필드 이름을 잘못 보낸 요청이 200으로 조용히 아무것도 안 하는 것보다 드러나는 편이 낫습니다.
 > 범위를 벗어난 값도 400입니다.
 >
 > **`monthlyBudget`이 바뀌면 서버가 묶음을 다시 계산합니다.** `burdenRatio`·`quadrant`는 재계산이 묶음 행에
 > 써 둔 값이라, 예산만 고치면 지도의 가로축과 처방·CTA가 옛 예산 기준으로 남습니다.
+>
+> **`outlierBaseAmount`는 재계산을 부르지 않습니다** (v2.38 · E-115). 후보는 조회 시점에 계산하므로
+> (E-62) 묶음 행에 굳은 값이 없습니다 — 다음 `GET /retrospects/candidates`부터 새 기준이 적용됩니다.
+> 한 번 넣은 기준 금액을 지우는 경로는 없습니다(`null`을 보내도 유지).
 
 **Response 200** — `GET /users/me`와 같은 객체입니다.
 
