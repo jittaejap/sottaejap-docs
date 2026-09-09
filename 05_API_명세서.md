@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.34 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.35 | **기준일:** 2026-09-09 | **Base URL:** `______`
 
+> **v2.35 변경 (2026-09-09 — `TOO_MANY_ROWS` 서버 `message`를 client가 그대로 보여 준다):** §2 `POST /transactions/upload` 행수 상한 문단의 v2.31 ⚠️("지금 client는 `message`를 버린다")를 지웁니다 — **client #24 → PR #25(`5b706b0`) 병합.** `src/api/errorMessage.ts`가 `TOO_MANY_ROWS`일 때 서버 `message`를 그대로 돌려주고, `TransactionsView.vue`의 `catch {}`도 이 헬퍼를 씁니다(온보딩은 이미 쓰고 있었음). 다른 오류 코드의 client 문구는 그대로이고 서버 계약도 그대로입니다. 같은 문단의 XLSX 힙 문장(server #58)은 PR #63이 아직 병합 전이라 두었습니다.
+>
 > **v2.34 변경 (2026-09-09 — `recentMessages` 항목 상한을 `role`별로):** §2 #11 · #28의 `recentMessages` 항목 `content` 상한을 **`user` 500자 · `assistant` 2,000자**로 나눕니다(01 v2.33 **E-110**, E-109 개정). `assistant` 항목은 AI `reply`를 client가 되돌려 보낸 것이라 500자로 두면 server가 만든 길이로 client가 400을 맞습니다(server PR #59 리뷰). `reply` 2,000자 이내는 ai가 보장합니다(§3, ai #55). `role` 규칙 · 400 `INVALID_INPUT` · 6건 절단(E-87)은 그대로입니다. server #61.
 >
 > **v2.33 변경 (2026-09-09 — `recentMessages` 항목 규칙):** §2 #11 `POST /retrospects/chat` · #28 `POST /chat/analysis`의 `recentMessages` **항목**에 규칙을 둡니다 — `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **1~500자**. 어기면 **400 `INVALID_INPUT`**이고 서버는 AI를 부르지 않습니다(01 v2.32 **E-109**). 종전에는 검증 없이 AI로 넘겨 AI 스키마가 거절한 422가 **503 `LLM_UNAVAILABLE`**로 보였습니다 — 입력 오류가 장애로 보이고 클라이언트는 템플릿 모드로 넘어갔습니다(server PR #55 리뷰 실측). 정렬 · 6건 절단(E-87)과 규격 안 입력의 응답은 그대로이고 새 오류 코드는 없습니다. server #56.
@@ -322,9 +324,9 @@
 **행수 상한 20,000행** (v2.29 — E-105). 머리글 아래 행(합계 · 여백 행 포함)이 20,000을 넘으면 **400 `TOO_MANY_ROWS`**이고
 파싱 · 저장 · 재계산 어느 것도 하지 않습니다 — 서버가 머리글을 찾은 직후 행 수를 보고 멈춥니다. 실측 약 3,500행/초라
 20,000행은 약 6초이고 client의 20초 타임아웃 안에 듭니다. 파일 크기 상한은 10MB 그대로입니다. 오류 `message`는
-"거래내역이 너무 많아요. 20,000건 이하로 나눠서 올려 주세요."입니다. ⚠️ **지금 client는 이 `message`를 버리고 고정 문구를
-보여 줍니다**(`TransactionsView.vue:218` · `OnboardingView.vue:408` — v2.31). 사용자가 "나눠서 올리면 된다"를 보려면
-**client #24**의 배선이 필요합니다. XLSX는 상한을 세기 전에 시트를 통째로 메모리에 올리므로 힙이 작으면(512MB) 400이
+"거래내역이 너무 많아요. 20,000건 이하로 나눠서 올려 주세요."이고, **client는 이 문장을 그대로 보여 줍니다** — 거래내역 화면과
+온보딩 3단계 모두 `apiErrorMessage`가 `TOO_MANY_ROWS`면 서버 `message`를 돌려줍니다(client #24 · PR #25, v2.35). 다른 오류 코드는
+client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시트를 통째로 메모리에 올리므로 힙이 작으면(512MB) 400이
 아니라 500이 납니다 — server #58(06 R28 조건).
 
 업로드를 커밋한 뒤 **묶음을 다시 계산합니다** (E-95). 업로드가 분석 기준월(E-60)을 바꾸는 순간이라, 다시 계산하지
