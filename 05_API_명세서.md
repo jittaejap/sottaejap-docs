@@ -1,6 +1,8 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.27 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.28 | **기준일:** 2026-09-09 | **Base URL:** `______`
+
+> **v2.28 변경 (2026-09-09 — 채팅 소비 분석 자유 질문):** §2 **#28 `POST /chat/analysis` 신설** (01 v2.29 **E-104** · FR-11-05 P2). #24와 같은 `{ reply, fallback }`이고, `/retrospects/chat`처럼 **상태 없는 프록시**입니다 — 클라이언트가 `recentMessages`를 들고 다니고 서버는 저장하지 않습니다. §3 `ANALYSIS` 작업의 호출 주체를 이 엔드포인트로 명시합니다.
 
 > **v2.27 변경 (2026-09-09 — 제안 이유를 AI 문장으로):** §2 `GET /suggestions`의 `reason` 메모를 갱신합니다 (01 v2.25 **E-103**, E-84의 "AI를 부르지 않는다" 폐기). `reason`은 이제 **AI가 쓴 문장이 있으면 그것**, 없으면 종전 템플릿 3종입니다. **목록 조회는 여전히 AI를 부르지 않습니다** — 문장은 회고 저장 커밋 뒤 `ACTION_PLAN`(§3)이 미리 채워 둡니다. 응답 필드는 그대로이고 클라이언트가 바꿀 것은 없습니다. server 이슈 #43 · 06 R32.
 
@@ -217,8 +219,9 @@
 | **25** | **GET** | **`/notifications/push-key`** | **Web Push VAPID 공개키** (v2.3 — E-68) | FR-10 | 석정한 |
 | **26** | **POST** | **`/notifications/push-subscriptions`** | **Web Push 구독 등록** (v2.3 — E-68) | FR-10 | 석정한 |
 | **27** | **DELETE** | **`/notifications/push-subscriptions`** | **Web Push 구독 해지** (v2.3 — E-68) | FR-10 | 석정한 |
+| **28** | **POST** | **`/chat/analysis`** | **소비 분석 자유 질문** (P2, v2.28 — E-104) — AI `POST /chat`(`ANALYSIS`) 위임, 상태 없는 프록시 | FR-11-05 | 정민규(프록시) · 오진호(AI) |
 
-> 외부 API는 모두 Spring이 제공합니다. 12~14·22는 **Spring 규칙 엔진**이 직접 산출한 값입니다 (v1.3 — E-18). **11·24만 AI `/chat`으로 위임**합니다.
+> 외부 API는 모두 Spring이 제공합니다. 12~14·22는 **Spring 규칙 엔진**이 직접 산출한 값입니다 (v1.3 — E-18). **11·24·28만 AI `/chat`으로 위임**합니다.
 
 ---
 
@@ -1162,6 +1165,49 @@
 
 ---
 
+### `POST /chat/analysis` (v2.28 신설 — E-104 · FR-11-05 P2)
+
+**상태 없는 프록시입니다.** `POST /retrospects/chat`과 같은 모양으로, 클라이언트가 소비 분석 채널의 최근 대화를 들고 다니고
+서버는 저장하지 않습니다. 서버는 기준월로 `task_context`를 만들어 AI `POST /chat`(§3 `ANALYSIS`)에 위임하고, 집계는 AI가
+내부 `/internal/ai/users/{userId}/analysis`로 읽습니다. **Spring은 답을 판단하거나 바꾸지 않습니다** (NFR-02 · #24와 같은 원칙).
+
+**Request**
+```json
+{
+  "message": "배달은 왜 조정 대상이에요?",
+  "recentMessages": [
+    { "role": "assistant", "content": "배달은 대부분 심야에 몰려 있고, 예산의 8%를 쓰면서 만족도는 가장 낮았어요." }
+  ]
+}
+```
+
+| 필드 | 규칙 |
+|---|---|
+| `message` | 필수. **1~500자** — 공백만 보내거나 넘으면 400 `INVALID_INPUT` (#24와 같은 상한, 같은 이유) |
+| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)**, 마지막 원소가 가장 최근 발화. 생략 가능. 서버는 **최근 6개**만 AI에 전달합니다 (E-87) |
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "reply": "배달 묶음은 이번 달 96,000원으로 예산의 8%인데 만족도가 가장 낮아서 조정 대상이에요.",
+    "fallback": false
+  }
+}
+```
+
+- `task_context.state`는 `{ "analysis_year_month": "2026-08" }` 하나입니다 (§3). 기준월은 `GET /analysis`와 같은 값이고,
+  거래가 없어 기준월이 없으면 `null`로 싣습니다.
+- **유효 묶음이 없으면** AI 핸들러가 LLM 없이 안내문("이번 달에 돌아본 소비가 아직 없어요…")을 돌려줍니다. `fallback`은
+  `false`입니다 — 장애가 아니라 정상 안내입니다.
+- `fallback: true`는 #24와 같습니다 — `OPENAI_API_KEY` 미설정(E-38) · AI → OpenAI 초과·실패(E-88). 클라이언트는 템플릿 모드 배너를 띄웁니다 (S11).
+- 되물음의 맥락은 **직전 assistant 발화 하나**입니다 — AI가 `recent_messages`에서 마지막 assistant 발화만 프롬프트에 싣습니다 (E-104).
+
+**503 `LLM_UNAVAILABLE`** — AI `/chat` 15초 초과·5xx.
+
+---
+
 ## 3. Spring ↔ FastAPI 연동 규격 (v1.3 — 레포 `sottaejap-ai` 기준 · 표기 E-32)
 
 > **9/2 최우선 작업.** 통합 담당(Integration Owner): **고현석**
@@ -1250,7 +1296,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `task` | `state` 필수 키 | AI가 돌려주는 것 (`reply`) |
 |---|---|---|
 | `REFLECTION` | `transaction` · `reason_code` · `reflection`(현재까지 확정값) · `step`(enum `reflectionStep` — v2.3 · E-69) | 다음 질문 또는 확인 문장. `INTRO`에서는 `reason_code` 재구성 설명 (FR-04-10·11) |
-| `ANALYSIS` | `analysis_year_month` (집계는 AI가 `/internal/ai/…/analysis`로 pull) | 사용자 질문에 대한 설명 |
+| `ANALYSIS` | `analysis_year_month` (집계는 AI가 `/internal/ai/…/analysis`로 pull). **호출 주체는 §2 #28 `POST /chat/analysis`** (v2.28 — E-104) | 사용자 질문에 대한 설명. 집계에 없는 수치·판정을 만들지 않는다 (NFR-02) |
 | `ACTION_PLAN` | `suggestion_ids[]` (상세는 pull) | 제안 이유 문장 (FR-08-01) |
 | `CLUSTER_NAMING` | `cluster_key` · `sample_merchants[]` · `tx_count` | 묶음 이름 1개, 12자 이내 (⑤ · FR-05-05). **12자는 유니코드 코드 포인트로 셉니다** (v2.23 · server #20) — 이모지 하나가 1자이고, 넘치면 서버가 코드 포인트 경계에서 자릅니다 |
 | `ANALYSIS_NARRATE` | `analysis_year_month` · `by_verdict[]` · `by_category[]` (Spring 집계값). **항목 키 (v2.11)** — `by_verdict[]`는 `verdict` · `cluster_count` · `monthly_total_amount` · `share`, `by_category[]`는 `category` · `dominant_time_slot` · `avg_amount` · `monthly_total_amount` · `verdict`. `pending`은 싣지 않습니다 (E-75) | '나만의 특징' 한 문장 (⑨ · FR-11-03). **집계에 없는 수치 서술 금지.** 한 자릿수 정수 예외는 `%`가 바로 뒤에 붙지 않은 경우만이고, 정상 `analysis_year_month`의 연도·월은 근거로 인정합니다(E-79 · E-101) |
