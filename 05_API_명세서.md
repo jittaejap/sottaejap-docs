@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.21 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.22 | **기준일:** 2026-09-09 | **Base URL:** `______`
 
+> **v2.22 변경 (2026-09-09 — 표준 태그 표기 정규화):** §2 `POST /retrospects` · `POST /retrospects/chat`이 `purpose`·`companion`을 **공백을 지워 대조하고 정본 표기로 되돌려 저장**합니다 (01 v2.20 E-99). 화면 문구 `"휴식 · 취미"`가 400 `INVALID_TAG`로 막혀 온보딩을 끝낼 수 없던 것을 닫습니다. 표준 태그 목록은 그대로이고, 공백을 지워도 태그가 아니면 여전히 400입니다. server 이슈 #38 · PR #41.
+>
 > **v2.21 변경 (2026-09-09 — 거래 목록 `category` 검증 철회):** §2 `GET /transactions`의 `category`가 "§0 enum 밖이면 400"이었으나 **§0에 카테고리 enum이 없고**(04 §4는 초안), 통합 매핑표(06 #11) 전까지 서버는 카드사 원본 문자열을 `category`에 그대로 저장합니다. 존재하지 않는 enum으로 400을 걸면 저장된 값으로 거르는 요청이 막히므로, **저장된 문자열 그대로 일치 필터 · 불일치는 빈 배열 200**으로 고칩니다. 매핑표가 생기면 05 §2 · 04 §4 · 컨트롤러 세 곳을 한 번에 enum으로 바꿉니다. server PR #37 리뷰(결정 1) · 06 R29.
 
 > **v2.20 변경 (2026-09-09 — 거래 목록 `page` 하한):** §2 `GET /transactions`의 `page`에 **음수는 400 `INVALID_INPUT`**을 명시합니다. E-93은 `size`의 하한(1 미만은 400)만 적었고 `page`는 "0부터"만 있어, 음수를 받으면 서버가 500을 내는 자리였습니다. server 이슈 #29.
@@ -471,6 +473,7 @@
 > 저장 시 **Spring 규칙 엔진**이 묶음·보정·판정을 재계산합니다 (v1.3 — E-18). HTTP 호출 없음.
 > 이름이 없는 새 묶음은 AI `POST /chat`(`task = CLUSTER_NAMING`)으로 `displayName`을 받습니다 (§3).
 > `purpose`·`companion`이 표준 태그 7/6종 밖이면 **400 `INVALID_TAG`** (E-20). `null`은 미확정으로 허용합니다.
+> **v2.22:** 대조 전에 **공백 · 줄바꿈 · 비분리 공백(U+00A0)을 지웁니다** (E-99). 화면 문구처럼 가운뎃점 둘레만 다른 `"휴식 · 취미"`는 200이고 **정본 `"휴식·취미"`로 저장**합니다. 공백을 지워도 표준 태그가 아니면 그대로 400입니다(`"야식"`). **저장값과 응답값은 언제나 정본 한 표기입니다** — `purpose`는 `clusterKey`의 한 자리라 표기가 갈라지면 같은 태그가 두 묶음이 됩니다.
 > **v2.2:** 재계산은 **사용자 전체 묶음**과 `User.avgSatisfaction`입니다 (E-61). 응답과 `transactions.behaviorId`는 항상 **리프 묶음**이고, 리프 회고 수가 `rules.rollup-min-count` 미만이면 상위 묶음(`카테고리|시간대||`)에 `parentId`로 붙습니다 (E-59). `monthlyBudget`이 없으면 `burdenRatio`·`quadrant`는 `null`, `verdict`는 세로축만으로 냅니다 (E-61). `behaviorName`은 커밋 후 `CLUSTER_NAMING`으로 받고, AI가 없으면 템플릿 `"{시간대 라벨} {카테고리}"`입니다 (E-64). 남의 거래·없는 거래는 **404 `NOT_FOUND`**.
 > `source`는 `CANDIDATE` / `ONBOARDING` / `MANUAL`. 내부 AI 경로(§3 `save_reflection`)는 `source`를 보내지 않으므로 `CANDIDATE`로 저장합니다 (E-66).
 
@@ -514,7 +517,7 @@
 }
 ```
 
-> `reflection`은 AI가 `tool_results[tool_name = "reflection"].data`로 돌려준 **후보값**입니다. 표준 태그 7/6종 밖 문자열은 서버가 `null`로 바꿉니다 (E-20). **사용자가 확인한 뒤 `POST /retrospects`로 저장**합니다.
+> `reflection`은 AI가 `tool_results[tool_name = "reflection"].data`로 돌려준 **후보값**입니다. 표준 태그 7/6종 밖 문자열은 서버가 `null`로 바꿉니다 (E-20). 사용자 확정값과 AI 후보값 모두 **공백만 다른 표기는 정본으로 맞춥니다** (v2.22 · E-99 — `POST /retrospects` 메모와 같은 규칙입니다). **사용자가 확인한 뒤 `POST /retrospects`로 저장**합니다.
 > `step`은 서버가 계산한 **다음 단계**입니다 — 응답 `reflection`에서 **아직 미확정인 첫 항목**(`satisfaction`이 `UNKNOWN` → `purpose` null → `companion` null → `repeatIntent` null) 순이고, 전부 확정이면 `CONFIRM`. AI가 폴백이라 아무것도 추출하지 못해도 남은 항목을 계속 묻습니다 (9/7 실측 정정 — `uncertainFields`만 보면 폴백에서 `CONFIRM`으로 건너뛰었습니다).
 > `uncertainFields`에는 AI의 `uncertain_fields`에 더해 **서버가 표준 태그 밖이라 버린 항목**도 들어갑니다. AI `data`에 키가 없는 항목은 요청의 확정값을 유지합니다.
 > `uncertainFields`는 AI의 `uncertain_fields`를 camelCase로 바꾼 것입니다 (`repeat_intention` → `repeatIntent`).
