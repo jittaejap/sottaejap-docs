@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.39 | **기준일:** 2026-09-10 | **Base URL:** `______`
+**버전:** v2.40 | **기준일:** 2026-09-10 | **Base URL:** `______`
 
+> **v2.40 변경 (2026-09-10 — recent_messages 전체가 LLM 프롬프트에 실린다 · E-117):** §2 #11 · #28, §3의 `recentMessages`/`recent_messages` 설명을 정정합니다 — AI는 이 배열을 **role을 보존한 채 LLM 대화 `messages`에 그대로 싣습니다**(01 v2.43 **E-117** · `sottaejap-ai` #80). §3의 "되물음의 맥락은 직전 assistant 발화 하나입니다"는 **삭제합니다** — 실제로는 직전 assistant 발화 1건만 반영됐던 구현 결함을 E-104 근거로 서술한 것이었고, E-104 본문에는 그런 규칙이 없습니다. 계약(요청 필드·정렬·6건 절단·항목 상한)은 바뀌지 않습니다 — 바뀌는 건 AI가 그 배열을 프롬프트에 반영하는 범위뿐입니다.
+>
 > **v2.39 변경 (2026-09-10 — AI → Spring 타임아웃 정정 · E-116):** §3 타임아웃 표의 **AI → Spring 내부 API**를 10초에서 **3초**로 정정합니다(01 v2.42 **E-116** · `sottaejap-ai` #65 · PR #70). Spring → AI `/chat` 15초 예산 안에서 `ANALYSIS`·`ACTION_PLAN` 최악 경로(Spring Tool 1회 + LLM 1회·재시도 포함 최대 2회)가 `3 + 6 × 2 = 15`초로 정확히 맞습니다(여유 없음) — 10초였을 때는 `10 + 12 = 22`초로 예산을 넘겼습니다. 계약(요청·응답 모양)은 바뀌지 않습니다.
 >
 > **v2.38 변경 (2026-09-10 — 사용자 기준 금액):** §2 `PUT /users/me/settings` 요청과 `GET /users/me` 응답에 **`outlierBaseAmount`**를 더합니다 — **큰 금액 후보 판정(`THRESHOLD_EXCEEDED`)의 원 단위 기준 금액**이고 **선택 항목**입니다 (01 v2.41 **E-115** · 04 v2.17 · server #74 · client #33). `outlierThreshold`(이상치 배수 · E-46)와 **다른 값입니다** — 배수는 규칙 ④ `TIMESLOT_OUTLIER`에, 이 금액은 규칙 ③에 쓰입니다. **`null`은 "그대로 두기"** 이고 **넷이 전부 비면 400**은 그대로입니다. 0 이하는 **400 `INVALID_INPUT`**이며 새 오류 코드는 없습니다. 값이 있으면 규칙 ③이 예산 비율 대신 이 금액을 보고, **예산이 없어도 판정이 열립니다**. 기존 사용자는 값이 `null`이고 지금 배포된 client가 이 필드를 보내지 않으므로 **화면이 깨질 일은 없습니다**.
@@ -546,7 +548,7 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 | `message` | `INTRO`에서는 생략 가능 — 서버가 고정 문구로 대체해 AI에 보냅니다(AI는 빈 메시지를 받지 않음). 그 외 단계는 필수이며 **최대 500자**입니다 — 넘으면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (#24 · #28과 같은 상한, 같은 이유. 01 v2.35 E-112) |
 | `step` | `INTRO` / `SATISFACTION` / `PURPOSE` / `COMPANION` / `REPEAT` / `CONFIRM`. 생략 시 `INTRO` |
 | `reflection` | 사용자가 **이미 확인한** 값. 표준 태그 밖 문자열은 **400 `INVALID_TAG`** |
-| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화입니다. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **`user` 1~500자 · `assistant` 1~2,000자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (v2.33 · E-109, 상한 분리 v2.34 · E-110) |
+| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화입니다. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). AI는 이 배열을 role을 보존한 채 LLM 대화 `messages`로 그대로 싣습니다(v2.40 · E-117). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **`user` 1~500자 · `assistant` 1~2,000자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (v2.33 · E-109, 상한 분리 v2.34 · E-110) |
 
 **Response 200**
 ```json
@@ -1234,7 +1236,7 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 | 필드 | 규칙 |
 |---|---|
 | `message` | 필수. **1~500자** — 공백만 보내거나 넘으면 400 `INVALID_INPUT` (#24와 같은 상한, 같은 이유) |
-| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)**, 마지막 원소가 가장 최근 발화. 생략 가능. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **`user` 1~500자 · `assistant` 1~2,000자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (#11과 같은 규칙, v2.33 · E-109, 상한 분리 v2.34 · E-110) |
+| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)**, 마지막 원소가 가장 최근 발화. 생략 가능. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). AI는 이 배열을 role을 보존한 채 LLM 대화 `messages`로 그대로 싣습니다(v2.40 · E-117). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **`user` 1~500자 · `assistant` 1~2,000자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (#11과 같은 규칙, v2.33 · E-109, 상한 분리 v2.34 · E-110) |
 
 **Response 200**
 ```json
@@ -1258,7 +1260,7 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 - `fallback: true`는 #24와 같습니다 — `OPENAI_API_KEY` 미설정(E-38) · AI → OpenAI 초과·실패(E-88). 클라이언트는 템플릿 모드 배너를 띄웁니다 (S11).
   **v2.32 확정 (E-108):** 숫자 가드(ai #48)가 근거 밖 수치를 걸러 답을 버린 경우는 이 목록에 **없습니다** —
   `fallback: false`로 안내문만 돌아갑니다. 검증 실패이지 AI 장애가 아니므로 템플릿 모드 배너를 띄우지 않습니다.
-- 되물음의 맥락은 **직전 assistant 발화 하나**입니다 — AI가 `recent_messages`에서 마지막 assistant 발화만 프롬프트에 싣습니다 (E-104).
+- 되물음의 맥락은 **`recent_messages` 최근 6건 전체**입니다 — AI가 role을 보존한 채 LLM 대화 `messages`에 그대로 싣습니다 (v2.40 · E-117).
 
 **503 `LLM_UNAVAILABLE`** — AI `/chat` 15초 초과·5xx.
 
@@ -1342,7 +1344,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `task_context.task` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / **`CLUSTER_NAMING`** / **`ANALYSIS_NARRATE`** / **`FINANCE_QA`** — `CLUSTER_NAMING`·`ANALYSIS_NARRATE`는 v1.3에서 문서가 정의, **v1.6 레포 반영 완료** (06 R4). `FINANCE_QA`는 v1.8 신설 (E-47) |
 | `task_context.status` | `ACTIVE` / `PAUSED` / `COMPLETED` — Spring이 소유. AI는 바꾸지 않는다 |
 | `task_context.state` | 작업별 구조화 상태 (아래 표). **레포는 `dict`로 받으므로 구조는 이 문서가 정본** / 키는 **중첩 객체까지 snake_case**입니다 (E-24 · v2.11) — Spring은 record·엔티티를 그대로 싣지 않고 키를 옮겨 담습니다 |
-| `recent_messages` | 최소 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화다 (E-87). 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION` · `ANALYSIS`는 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63 · E-104), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67). 클라이언트가 보낸 항목은 Spring이 먼저 검증한다 — `role`은 `user` 또는 `assistant`, `content`는 `user` 1~500자 · `assistant` 1~2,000자. 규격 밖이면 400으로 끝나고 이 요청은 만들어지지 않는다 (v2.33 — E-109 · v2.34 — E-110). `assistant` 항목은 AI `reply`를 client가 되돌려 보낸 것이므로 **AI는 `reply`를 2,000자(코드 포인트) 이내로 만든다** (ai #55) |
+| `recent_messages` | 최소 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화다 (E-87). 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. AI는 이 배열을 role을 보존한 채 LLM 대화 `messages`로 그대로 싣는다(v2.40 · E-117). `REFLECTION` · `ANALYSIS`는 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63 · E-104), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67). 클라이언트가 보낸 항목은 Spring이 먼저 검증한다 — `role`은 `user` 또는 `assistant`, `content`는 `user` 1~500자 · `assistant` 1~2,000자. 규격 밖이면 400으로 끝나고 이 요청은 만들어지지 않는다 (v2.33 — E-109 · v2.34 — E-110). `assistant` 항목은 AI `reply`를 client가 되돌려 보낸 것이므로 **AI는 `reply`를 2,000자(코드 포인트) 이내로 만든다** (ai #55) |
 | `tool_results[].data` | 회고 후보(①)의 `purpose`·`companion`은 **표준 태그 또는 `null`** 이어야 한다. 자유 문자열이면 Spring이 버린다 (E-20) |
 | `needs_clarification` | `true`면 클라이언트는 `uncertain_fields`만 선택지 버튼으로 되묻는다 (FR-04-08) |
 | **`fallback`** | **v1.3 추가.** LLM 6초 초과·오류로 템플릿 응답을 돌려줄 때 `true` (FR-04-15 · E-88). **`OPENAI_API_KEY`가 비어 있을 때도 `true`** (E-38). 클라이언트는 템플릿 모드 배너를 띄운다 (S11) |
