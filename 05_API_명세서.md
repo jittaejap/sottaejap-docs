@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.35 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.36 | **기준일:** 2026-09-09 | **Base URL:** `______`
 
+> **v2.36 변경 (2026-09-09 — 회고 대화 `message` 상한):** §2 #11 `POST /retrospects/chat`의 `message`에 **최대 500자**를 둡니다 — #24 · #28과 같은 값이고 이유도 같습니다(프롬프트 예산 — 같은 요청에 최근 대화 6건이 함께 실립니다). 넘으면 **400 `INVALID_INPUT`**이고 서버는 AI를 부르지 않습니다. `INTRO` 생략 규칙과 `recentMessages` 항목 규칙(E-109 · E-110)은 그대로이며 새 오류 코드는 없습니다 (01 v2.35 **E-112** · server #67).
+>
 > **v2.35 변경 (2026-09-09 — `TOO_MANY_ROWS` 서버 `message`를 client가 그대로 보여 준다):** §2 `POST /transactions/upload` 행수 상한 문단의 v2.31 ⚠️("지금 client는 `message`를 버린다")를 지웁니다 — **client #24 → PR #25(`5b706b0`) 병합.** `src/api/errorMessage.ts`가 `TOO_MANY_ROWS`일 때 서버 `message`를 그대로 돌려주고, `TransactionsView.vue`의 `catch {}`도 이 헬퍼를 씁니다(온보딩은 이미 쓰고 있었음). 다른 오류 코드의 client 문구는 그대로이고 서버 계약도 그대로입니다. 같은 문단의 XLSX 힙 문장(server #58)은 PR #63이 아직 병합 전이라 두었습니다.
 >
 > **v2.34 변경 (2026-09-09 — `recentMessages` 항목 상한을 `role`별로):** §2 #11 · #28의 `recentMessages` 항목 `content` 상한을 **`user` 500자 · `assistant` 2,000자**로 나눕니다(01 v2.33 **E-110**, E-109 개정). `assistant` 항목은 AI `reply`를 client가 되돌려 보낸 것이라 500자로 두면 server가 만든 길이로 client가 400을 맞습니다(server PR #59 리뷰). `reply` 2,000자 이내는 ai가 보장합니다(§3, ai #55). `role` 규칙 · 400 `INVALID_INPUT` · 6건 절단(E-87)은 그대로입니다. server #61.
@@ -533,7 +535,7 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 | 필드 | 규칙 |
 |---|---|
 | `transactionId` | 필수. 내 거래가 아니면 **404 `NOT_FOUND`**, 이미 회고가 있으면 **409 `DUPLICATE_RETROSPECT`** |
-| `message` | `INTRO`에서는 생략 가능 — 서버가 고정 문구로 대체해 AI에 보냅니다(AI는 빈 메시지를 받지 않음). 그 외 단계는 필수 |
+| `message` | `INTRO`에서는 생략 가능 — 서버가 고정 문구로 대체해 AI에 보냅니다(AI는 빈 메시지를 받지 않음). 그 외 단계는 필수이며 **최대 500자**입니다 — 넘으면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (#24 · #28과 같은 상한, 같은 이유. 01 v2.35 E-112) |
 | `step` | `INTRO` / `SATISFACTION` / `PURPOSE` / `COMPANION` / `REPEAT` / `CONFIRM`. 생략 시 `INTRO` |
 | `reflection` | 사용자가 **이미 확인한** 값. 표준 태그 밖 문자열은 **400 `INVALID_TAG`** |
 | `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화입니다. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **`user` 1~500자 · `assistant` 1~2,000자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (v2.33 · E-109, 상한 분리 v2.34 · E-110) |
