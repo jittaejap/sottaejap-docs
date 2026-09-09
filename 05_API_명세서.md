@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.33 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.34 | **기준일:** 2026-09-09 | **Base URL:** `______`
 
+> **v2.34 변경 (2026-09-09 — `recentMessages` 항목 상한을 `role`별로):** §2 #11 · #28의 `recentMessages` 항목 `content` 상한을 **`user` 500자 · `assistant` 2,000자**로 나눕니다(01 v2.33 **E-110**, E-109 개정). `assistant` 항목은 AI `reply`를 client가 되돌려 보낸 것이라 500자로 두면 server가 만든 길이로 client가 400을 맞습니다(server PR #59 리뷰). `reply` 2,000자 이내는 ai가 보장합니다(§3, ai #55). `role` 규칙 · 400 `INVALID_INPUT` · 6건 절단(E-87)은 그대로입니다. server #61.
+>
 > **v2.33 변경 (2026-09-09 — `recentMessages` 항목 규칙):** §2 #11 `POST /retrospects/chat` · #28 `POST /chat/analysis`의 `recentMessages` **항목**에 규칙을 둡니다 — `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **1~500자**. 어기면 **400 `INVALID_INPUT`**이고 서버는 AI를 부르지 않습니다(01 v2.32 **E-109**). 종전에는 검증 없이 AI로 넘겨 AI 스키마가 거절한 422가 **503 `LLM_UNAVAILABLE`**로 보였습니다 — 입력 오류가 장애로 보이고 클라이언트는 템플릿 모드로 넘어갔습니다(server PR #55 리뷰 실측). 정렬 · 6건 절단(E-87)과 규격 안 입력의 응답은 그대로이고 새 오류 코드는 없습니다. server #56.
 >
 > **v2.32 변경 (2026-09-09 — `POST /chat/analysis` 안내문 확정 · 숫자 가드 거절의 fallback 값):** §2 #28의 "byCategory 빈 경우" 안내문을 v2.30이 남겨 둔 자리에 **ai #50의 최종 문구**로 채웁니다(01 v2.31 **E-107**). 숫자 가드(ai #48)가 답을 버릴 때 `fallback`은 **`false`로 확정**합니다 — 가드 거절은 `fallback: true`의 기존 정의(`OPENAI_API_KEY` 미설정 · AI→OpenAI 초과·실패)에 없던 경우라 새로 정합니다(01 v2.31 **E-108**). 요청·응답 필드·구조는 그대로라 계약 변경은 아닙니다.
@@ -532,7 +534,7 @@
 | `message` | `INTRO`에서는 생략 가능 — 서버가 고정 문구로 대체해 AI에 보냅니다(AI는 빈 메시지를 받지 않음). 그 외 단계는 필수 |
 | `step` | `INTRO` / `SATISFACTION` / `PURPOSE` / `COMPANION` / `REPEAT` / `CONFIRM`. 생략 시 `INTRO` |
 | `reflection` | 사용자가 **이미 확인한** 값. 표준 태그 밖 문자열은 **400 `INVALID_TAG`** |
-| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화입니다. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **1~500자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (v2.33 · E-109) |
+| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화입니다. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **`user` 1~500자 · `assistant` 1~2,000자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (v2.33 · E-109, 상한 분리 v2.34 · E-110) |
 
 **Response 200**
 ```json
@@ -1203,7 +1205,7 @@
 | 필드 | 규칙 |
 |---|---|
 | `message` | 필수. **1~500자** — 공백만 보내거나 넘으면 400 `INVALID_INPUT` (#24와 같은 상한, 같은 이유) |
-| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)**, 마지막 원소가 가장 최근 발화. 생략 가능. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **1~500자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (#11과 같은 규칙, v2.33 · E-109) |
+| `recentMessages` | 최근 대화. **오름차순(오래된 → 최신)**, 마지막 원소가 가장 최근 발화. 생략 가능. 서버는 **최근 6개**만 AI에 전달합니다 (E-87). 항목마다 `role`은 `user` 또는 `assistant`, `content`는 공백 아닌 **`user` 1~500자 · `assistant` 1~2,000자** — 어기면 400 `INVALID_INPUT`이고 AI를 부르지 않습니다 (#11과 같은 규칙, v2.33 · E-109, 상한 분리 v2.34 · E-110) |
 
 **Response 200**
 ```json
@@ -1311,7 +1313,7 @@ Python = Agent / 자연어 / Tool Calling / RAG / 설명
 | `task_context.task` | `REFLECTION` / `ANALYSIS` / `ACTION_PLAN` / **`CLUSTER_NAMING`** / **`ANALYSIS_NARRATE`** / **`FINANCE_QA`** — `CLUSTER_NAMING`·`ANALYSIS_NARRATE`는 v1.3에서 문서가 정의, **v1.6 레포 반영 완료** (06 R4). `FINANCE_QA`는 v1.8 신설 (E-47) |
 | `task_context.status` | `ACTIVE` / `PAUSED` / `COMPLETED` — Spring이 소유. AI는 바꾸지 않는다 |
 | `task_context.state` | 작업별 구조화 상태 (아래 표). **레포는 `dict`로 받으므로 구조는 이 문서가 정본** / 키는 **중첩 객체까지 snake_case**입니다 (E-24 · v2.11) — Spring은 record·엔티티를 그대로 싣지 않고 키를 옮겨 담습니다 |
-| `recent_messages` | 최소 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화다 (E-87). 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION` · `ANALYSIS`는 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63 · E-104), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67). 클라이언트가 보낸 항목은 Spring이 먼저 검증한다 — `role`은 `user` 또는 `assistant`, `content`는 1~500자. 규격 밖이면 400으로 끝나고 이 요청은 만들어지지 않는다 (v2.33 — E-109) |
+| `recent_messages` | 최소 최근 대화. **오름차순(오래된 → 최신)** 이며 마지막 원소가 가장 최근 발화다 (E-87). 전체 이력을 보내지 않는다 (레포 원칙). **최근 6건**만 싣는다. `REFLECTION` · `ANALYSIS`는 클라이언트가 `recentMessages`로 보낸 것을 그대로 넘기고(E-63 · E-104), `FINANCE_QA`는 Spring이 `chat_messages`에서 읽는다 (v2.3 — E-67). 클라이언트가 보낸 항목은 Spring이 먼저 검증한다 — `role`은 `user` 또는 `assistant`, `content`는 `user` 1~500자 · `assistant` 1~2,000자. 규격 밖이면 400으로 끝나고 이 요청은 만들어지지 않는다 (v2.33 — E-109 · v2.34 — E-110). `assistant` 항목은 AI `reply`를 client가 되돌려 보낸 것이므로 **AI는 `reply`를 2,000자(코드 포인트) 이내로 만든다** (ai #55) |
 | `tool_results[].data` | 회고 후보(①)의 `purpose`·`companion`은 **표준 태그 또는 `null`** 이어야 한다. 자유 문자열이면 Spring이 버린다 (E-20) |
 | `needs_clarification` | `true`면 클라이언트는 `uncertain_fields`만 선택지 버튼으로 되묻는다 (FR-04-08) |
 | **`fallback`** | **v1.3 추가.** LLM 6초 초과·오류로 템플릿 응답을 돌려줄 때 `true` (FR-04-15 · E-88). **`OPENAI_API_KEY`가 비어 있을 때도 `true`** (E-38). 클라이언트는 템플릿 모드 배너를 띄운다 (S11) |
