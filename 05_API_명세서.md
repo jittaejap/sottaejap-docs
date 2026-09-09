@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.36 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.37 | **기준일:** 2026-09-09 | **Base URL:** `______`
 
+> **v2.37 변경 (2026-09-09 — 목표 달성 예정일):** §2 #4 · #5의 목표 계약에 **`targetDate`**를 더합니다 — `POST /goals` · `PUT /goals/{id}` 요청의 **선택 항목**이고 `GET /goals` 응답에 함께 옵니다. 형식은 **`YYYY-MM-DD`**입니다 (01 v2.39 **E-114** · 04 v2.16 · server #71 · client PR #28). **이름은 `targetDate`로 고정합니다** — client 내부 이름은 `goalDueDate`지만 계약 이름이 갈라지면 서버가 모르는 필드를 400도 없이 조용히 버립니다. **`PUT`에서 생략하면 유지**합니다 — `currentAmount`에 이은 "생략하면 유지"의 두 번째 사례이고, 이유는 실적이라서가 아니라 **지금 배포된 마이페이지가 이 값을 보내지 않아서**입니다. `@Future` 같은 값 검증은 두지 않고 형식만 봅니다 — 틀리면 **400 `INVALID_INPUT`**이고 새 오류 코드는 없습니다. 기존 목표는 값이 `null`이고 client가 아직 이 필드를 보내지 않으므로 **지금 화면이 깨질 일은 없습니다**.
+>
 > **v2.36 변경 (2026-09-09 — 회고 대화 `message` 상한):** §2 #11 `POST /retrospects/chat`의 `message`에 **최대 500자**를 둡니다 — #24 · #28과 같은 값이고 이유도 같습니다(프롬프트 예산 — 같은 요청에 최근 대화 6건이 함께 실립니다). 넘으면 **400 `INVALID_INPUT`**이고 서버는 AI를 부르지 않습니다. `INTRO` 생략 규칙과 `recentMessages` 항목 규칙(E-109 · E-110)은 그대로이며 새 오류 코드는 없습니다 (01 v2.35 **E-112** · server #67).
 >
 > **v2.35 변경 (2026-09-09 — `TOO_MANY_ROWS` 서버 `message`를 client가 그대로 보여 준다):** §2 `POST /transactions/upload` 행수 상한 문단의 v2.31 ⚠️("지금 client는 `message`를 버린다")를 지웁니다 — **client #24 → PR #25(`5b706b0`) 병합.** `src/api/errorMessage.ts`가 `TOO_MANY_ROWS`일 때 서버 `message`를 그대로 돌려주고, `TransactionsView.vue`의 `catch {}`도 이 헬퍼를 씁니다(온보딩은 이미 쓰고 있었음). 다른 오류 코드의 client 문구는 그대로이고 서버 계약도 그대로입니다. 같은 문단의 XLSX 힙 문장(server #58)은 PR #63이 아직 병합 전이라 두었습니다.
@@ -866,6 +868,7 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
       "id": 3,
       "name": "여행 자금",
       "targetAmount": 1000000,
+      "targetDate": "2026-12-25",
       "currentAmount": 0,
       "adoptedSaving": 24000,
       "achievementRate": 0.0,
@@ -877,6 +880,7 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 
 | 필드 | 산식 (E-83) |
 |---|---|
+| `targetDate` | 저장된 목표 달성 예정일. **아직 정하지 않았으면 `null`** (v2.37 — E-114). 산식이 아니라 저장값이다 — 서버는 이 날짜로 아무것도 계산하지 않는다 |
 | `adoptedSaving` | 이 목표에 붙은 `ADOPTED` 제안의 `expectedSaving` 합 |
 | `achievementRate` | `currentAmount ÷ targetAmount` |
 | `projectedRate` | `(currentAmount + adoptedSaving) ÷ targetAmount` |
@@ -887,20 +891,30 @@ client의 고정 문구 그대로입니다. XLSX는 상한을 세기 전에 시�
 
 **`POST /goals` · `PUT /goals/{id}` — Request**
 ```json
-{ "name": "여행 자금", "targetAmount": 1000000, "currentAmount": 0 }
+{ "name": "여행 자금", "targetAmount": 1000000, "targetDate": "2026-12-25", "currentAmount": 0 }
 ```
 
 | 필드 | 규칙 |
 |---|---|
 | `name` | 1~50자. **`POST`·`PUT` 모두 필수** |
 | `targetAmount` | 1 이상. **`POST`·`PUT` 모두 필수** |
+| `targetDate` | `YYYY-MM-DD`. **선택 항목**입니다 — `POST`에서 생략하면 `null`, `PUT`에서 생략하면 **그대로 둡니다** (v2.37 — E-114) |
 | `currentAmount` | 0 이상. `POST`에서 생략하면 **0**, `PUT`에서 생략하면 **그대로 둡니다** |
 
 어기면 400 `INVALID_INPUT`, 남의 목표·없는 목표는 404 `NOT_FOUND`입니다.
 
 > **`PUT /goals/{id}`는 전체 교체입니다.** `name`과 `targetAmount`를 빼고 보내면 400입니다.
-> `currentAmount`만 예외인 이유는 **실적이라 화면이 들고 있지 않기 때문**입니다 — 이름만 고치는 요청이
-> 실적을 0으로 되돌리면 안 됩니다.
+> 예외는 **둘**이고 이유가 다릅니다. `currentAmount`는 **실적이라 화면이 들고 있지 않기 때문**입니다 —
+> 이름만 고치는 요청이 실적을 0으로 되돌리면 안 됩니다. `targetDate`는 **지금 배포된 마이페이지가
+> 이 값을 보내지 않기 때문**입니다(v2.37) — 생략을 "지움"으로 읽으면 이름만 고쳐도 온보딩에서 정한
+> 예정일이 사라집니다.
+>
+> **`targetDate`에 값 검증은 두지 않습니다.** "오늘 이후"는 고를 때 지키는 규칙이고 화면이 이미 막습니다 —
+> 서버가 `@Future`로 막으면 예정일이 지난 목표는 이름조차 고칠 수 없습니다(전체 교체라 화면이 같은
+> 날짜를 되보냅니다). 형식이 틀리면 본문을 읽다 실패해 **400 `INVALID_INPUT`**이고 한 건도 저장되지 않습니다.
+>
+> **API 이름은 `targetDate`입니다.** client 내부 이름(`goalDueDate`)과 다르더라도 이 이름으로 보냅니다 —
+> 서버가 모르는 필드는 400도 없이 조용히 버려집니다.
 
 **`DELETE /goals/{id}`** — soft delete(`deletedAt`)입니다. 목록에서 빠지지만 **`suggestions.goal_id`는 그대로 둡니다** —
 지운 목표에 붙어 있던 채택 이력을 잃지 않기 위해서입니다 (E-83). 응답은 `{ "success": true }`입니다.
