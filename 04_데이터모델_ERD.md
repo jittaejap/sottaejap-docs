@@ -1,7 +1,9 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.10 | **기준일:** 2026-09-09 | **담당:** 고현석
+**버전:** v2.11 | **기준일:** 2026-09-09 | **담당:** 고현석
 
+> **v2.11 변경 (2026-09-09):** §3 `MonthlySnapshot` — **실적 배분은 직전 달(현재 연월 − 1) 확정에서만**, 확정된 달의 **전월 값은 저장된 `savedAmount`에서 역산**하고 `previousRepeatCount`는 전월 스냅샷 값 또는 null, **첫 거래월 이전 달은 저장하지 않는다** (01 v2.17 E-94 ③④⑤ 보강 · server PR #32 리뷰). 스키마 변경 없음.
+>
 > **v2.10 변경 (2026-09-09):** §3에 **`MonthlySnapshot` 산식 4종과 확정 규칙**(01 E-94) · **`Goal.currentAmount` 실적 배분** 규칙을 추가합니다. 스키마 변경 없음 — `monthly_snapshots`는 V1 그대로입니다. `savedAmount`는 전체 지출 차(음수 허용), 지난달은 첫 조회 때 확정, 이번 달은 저장하지 않습니다.
 >
 > **v2.9 변경 (2026-09-08):** `FinancialChunk`에 **`createdAt`을 신설**하고 **`source`를 `NOT NULL`로 못 박습니다** (server PR #22 리뷰). `createdAt`은 다른 테이블과 같은 `TIMESTAMPTZ NOT NULL DEFAULT now()`입니다 — 재적재가 `ON CONFLICT (chunk_id) DO UPDATE`로 도는 탓에, 없으면 청크가 언제 처음 들어왔는지 DB만 보고는 알 수 없습니다. `source`는 종전에 nullable 여부를 적지 않아 `sottaejap-ai`의 `FinancialChunk.source`가 `str | None`으로 갈렸습니다 — FR-12-02·03이 출처 언급을 요구하므로 **출처 없는 청크는 적재하지 않습니다**(06 R23). `CREATE EXTENSION`은 `WITH SCHEMA public`으로 설치 위치를 못 박습니다. 다른 엔티티는 그대로입니다.
@@ -332,11 +334,16 @@ repeatCount(M)        = Σ txCount(M) OVER 묶음 WHERE 유효(E-72) ∧ RESOLVE
 확정 규칙             = M < 현재 KST 연월 : 스냅샷 없으면 계산 → upsert, 있으면 그대로 (다시 계산하지 않는다)
                         M = 현재 연월     : 계산만, 저장 없음
                         M > 현재 연월     : 400
+                        M < 첫 거래월     : 계산만, 저장 없음 (v2.11 — 거래가 없는 사용자도 같다)
                         현재 연월은 서비스가 Clock으로 넘긴다. rules/는 now()를 부르지 않는다
+확정된 달의 전월 값   = previousTotalSpending = totalSpending + savedAmount (savedAmount가 null이면 null)   # v2.11 — 저장값에서 역산
+                        previousRepeatCount   = M−1 스냅샷이 있으면 그 repeatCount, 없으면 null. 지금 거래로 다시 세지 않는다
+                        확정하지 않은 달(M = 현재 연월)의 전월 값은 M−1 스냅샷이 있으면 그것, 없으면 지금 거래로 계산
 
-Goal.currentAmount   += floor(savedAmount(M) × expectedSaving(goal) ÷ Σ expectedSaving)   # M 확정 시 1회 · savedAmount > 0일 때만
-                        대상 = ADOPTED 제안이 붙은 목표. 나머지 원 단위는 배분액이 가장 큰 목표에. 대상이 없으면 배분 없음
-                        확정과 배분은 한 트랜잭션 — 두 번 더해지지 않는다. 채택 시점 규칙(E-82)은 그대로
+Goal.currentAmount   += floor(savedAmount(M) × expectedSaving(goal) ÷ Σ expectedSaving)   # M = 현재 연월 − 1 확정 시 1회 · savedAmount > 0일 때만 (v2.11)
+                        그 이전 달은 확정만 하고 배분하지 않는다. 대상 = ADOPTED 제안이 붙은 목표. 나머지 원 단위는 배분액이 가장 큰 목표에
+                        (같으면 expectedSaving 큰 목표 → id 작은 목표). 대상이 없으면 배분 없음
+                        확정과 배분은 한 트랜잭션 — 두 번 더해지지 않는다. 갱신은 DB에서 원자적으로 더한다. 채택 시점 규칙(E-82)은 그대로
 ```
 
 > ⚠️ `k`(#15) · 롤업 기준(#16) · 보류 임계값(#17) · 축 경계 `Bx`/`By`(#18)는 **Spring `application.yml`의 `rules.*` 설정 파라미터**로 분리합니다 (07 §7). **v2.2:** 잠정값 `3 · 3 · 3 · 0.1 · 0`을 기본값으로 주입했습니다 (E-57). 회고 저장 시 **사용자 전체 묶음**을 재계산합니다 (E-61).

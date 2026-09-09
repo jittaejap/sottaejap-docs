@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.17 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.18 | **기준일:** 2026-09-09 | **Base URL:** `______`
 
+> **v2.18 변경 (2026-09-09 — 월간 리포트 확정 규칙 보강):** §2 `GET /reports/monthly` — 목표 실적 배분은 **직전 달(현재 연월 − 1)의 첫 조회에서만**, 확정된 달의 전월 두 값은 굳은 값(`savedAmount` 역산 · 전월 스냅샷 또는 null), 첫 거래월 이전 달은 저장하지 않아 `finalized: false` (01 v2.17 E-94 보강 · server PR #32 리뷰).
+>
 > **v2.17 변경 (2026-09-09 — 업로드 뒤 재계산의 건너뜀 조건 · 제안 목록):** §2 `POST /transactions/upload`에서 **`importedCount`가 0이면 건너뛴다를 취소합니다** (E-96) — 그 조건이 재계산 실패 뒤의 복구 경로(같은 CSV 재업로드)를 막았습니다. 건너뛰는 조건은 "회고 0건"이고 서버가 판단합니다. **`GET /suggestions`의 `PROPOSED`도 새 기준월 기준으로 다시 계산되고 대상이 없으면 빈다**를 함께 적습니다 (E-97) — 종전에는 `GET /analysis` · `GET /satisfaction-map`만 적어 클라이언트가 버그로 볼 여지가 있었습니다. server PR #31 리뷰.
 
 > **v2.16 변경 (2026-09-09 — 온보딩 표본 추출):** §2 `POST /onboarding/start`에 **Response와 표본 선정 규칙을
@@ -858,8 +860,9 @@
 |---|---|---|---|
 | `yearMonth` | `YYYY-MM` · optional | **분석 기준월** (`GET /users/me`의 `analysisYearMonth`, E-60) | 미래 달(현재 KST 연월보다 뒤)은 400 |
 
-> **확정 규칙 (E-94).** `yearMonth`가 **지난달 이전**이면 첫 조회 때 계산해 `monthly_snapshots`에 저장하고 이후 그 값을 그대로 돌려줍니다 — 확정된 달은 회고를 더 해도 다시 계산하지 않습니다. **이번 달**이면 매번 계산하고 저장하지 않습니다(`finalized: false`). 스케줄러는 없습니다.
-> **목표 실적.** 지난달이 확정되는 그 요청에서 `savedAmount > 0`이면 `ADOPTED` 제안이 붙은 목표에 `expectedSaving` 비율로 배분해 `Goal.currentAmount`에 더합니다(04 §3). 그때부터 `GET /goals`의 `achievementRate`가 움직입니다. 채택 자체는 여전히 `currentAmount`를 바꾸지 않습니다(E-82).
+> **확정 규칙 (E-94).** `yearMonth`가 **지난달 이전**이면 첫 조회 때 계산해 `monthly_snapshots`에 저장하고 이후 그 값을 그대로 돌려줍니다 — 확정된 달은 회고를 더 해도 다시 계산하지 않습니다. **이번 달**이면 매번 계산하고 저장하지 않습니다(`finalized: false`). **첫 거래월 이전 달**도 저장하지 않습니다(`finalized: false`, v2.18). 스케줄러는 없습니다.
+> **확정된 달의 전월 값 (v2.18).** `previousTotalSpending`은 저장된 `savedAmount`에서 역산한 값이라 `savedAmount = previousTotalSpending − totalSpending`이 응답 안에서 항상 성립합니다. `previousRepeatCount`는 전월 스냅샷이 있으면 그 값, 없으면 `null`입니다 — 전월을 나중에 확정하면 한 번 채워지고 그 뒤로 움직이지 않습니다.
+> **목표 실적.** **직전 달(현재 연월 − 1)** 이 확정되는 그 요청에서만(v2.18 — 그 이전 달은 확정만 합니다) `savedAmount > 0`이면 `ADOPTED` 제안이 붙은 목표에 `expectedSaving` 비율로 배분해 `Goal.currentAmount`에 더합니다(04 §3). 그때부터 `GET /goals`의 `achievementRate`가 움직입니다. 채택 자체는 여전히 `currentAmount`를 바꾸지 않습니다(E-82).
 > **데이터 없는 달도 200**입니다 — `totalSpending` 0, 전월이 없으면 `savedAmount` · `previousTotalSpending` · `previousRepeatCount`는 `null`.
 
 **Response 200**
