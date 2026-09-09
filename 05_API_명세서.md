@@ -1,7 +1,9 @@
 # 소때잡 — API 명세서
 
-**버전:** v2.31 | **기준일:** 2026-09-09 | **Base URL:** `______`
+**버전:** v2.32 | **기준일:** 2026-09-09 | **Base URL:** `______`
 
+> **v2.32 변경 (2026-09-09 — `POST /chat/analysis` 안내문 확정 · 숫자 가드 거절의 fallback 값):** §2 #28의 "byCategory 빈 경우" 안내문을 v2.30이 남겨 둔 자리에 **ai #50의 최종 문구**로 채웁니다(01 v2.31 **E-107**). 숫자 가드(ai #48)가 답을 버릴 때 `fallback`은 **`false`로 확정**합니다 — 가드 거절은 `fallback: true`의 기존 정의(`OPENAI_API_KEY` 미설정 · AI→OpenAI 초과·실패)에 없던 경우라 새로 정합니다(01 v2.31 **E-108**). 요청·응답 필드·구조는 그대로라 계약 변경은 아닙니다.
+>
 > **v2.31 변경 (2026-09-09 — `TOO_MANY_ROWS` 화면 표시는 client 배선이 필요):** §2 `POST /transactions/upload` 행수 상한 문단의 "화면은 이 문장을 그대로 보여 주면 됩니다"를 **현재 client는 서버 `message`를 버린다**로 고칩니다 — `TransactionsView.vue:218`은 `catch {}`, `OnboardingView.vue:408`은 `apiErrorMessage`의 `default`가 fallback. **client #24**. 서버 계약은 그대로입니다(server PR #54 리뷰 B).
 >
 > **v2.30 변경 (2026-09-09 — `POST /chat/analysis` 안내문 조건 정정):** §2 #28의 "유효 묶음이 없으면 안내문" 줄을 **ai 코드의 실제 조건**으로 고칩니다 — `_has_valid_data`는 `byCategory`가 비어 있는지만 보므로 안내문 하나가 server `highlight`의 두 분기(유효 묶음 0개 · 묶음은 있는데 기준월 합계 0)를 덮습니다. 옛 잠정 문구의 시점 모호성도 그대로입니다. 조건 분리 또는 두 경우에 참인 문장은 **ai #50**입니다(server PR #53 리뷰). 계약 변경이 아니라 서술 정정입니다.
@@ -1215,11 +1217,14 @@
 - `task_context.state`는 `{ "analysis_year_month": "2026-08" }` 하나입니다 (§3). 기준월은 `GET /analysis`와 같은 값이고,
   거래가 없어 기준월이 없으면 `null`로 싣습니다.
 - **`byCategory`가 비어 있으면** AI 핸들러가 LLM 없이 안내문을 돌려줍니다. `fallback`은 `false`입니다 — 장애가 아니라
-  정상 안내입니다. ⚠️ **v2.30 정정:** ai `_has_valid_data`는 `byCategory`만 보므로 이 안내문 하나가 server `highlight`의
-  두 분기 — 유효 묶음 0개(`NO_RETROSPECT`) · 묶음은 있는데 기준월 합계 0(`NO_MONTH_ACTIVITY`, E-89) — 를 함께 덮습니다.
-  지금 문구("이번 달에 돌아본 소비가 아직 없어요…")는 E-89가 버린 옛 잠정 문구와 같은 시점 모호성을 갖습니다. 조건 분리
-  또는 두 경우에 모두 참인 문장은 **ai #50**에서 정합니다 — 정해지면 이 줄을 그 결과로 바꿉니다.
+  정상 안내입니다. **v2.32 확정 (E-107):** 두 경우를 나눕니다 — 유효 묶음 수(`byVerdict[].clusterCount` 합 +
+  `pending.clusterCount`, server `HighlightTemplate.effectiveClusterCount`와 같은 식)가 **0이면**
+  `"아직 돌아본 소비가 없어요. 몇 건만 회고하면 분석을 보여드릴 수 있어요."`, **1 이상이면**(묶음은 있는데 기준월
+  합계만 0, E-89와 같은 상황) `"이번 달 거래는 아직 회고한 게 없어요. 이번 달 거래를 몇 건 회고하면 분석을 보여드릴
+  수 있어요."`입니다. 후자는 "이번 달 거래를"이 회고 대상을 가리켜 옛 잠정 문구의 시점 모호성이 없습니다.
 - `fallback: true`는 #24와 같습니다 — `OPENAI_API_KEY` 미설정(E-38) · AI → OpenAI 초과·실패(E-88). 클라이언트는 템플릿 모드 배너를 띄웁니다 (S11).
+  **v2.32 확정 (E-108):** 숫자 가드(ai #48)가 근거 밖 수치를 걸러 답을 버린 경우는 이 목록에 **없습니다** —
+  `fallback: false`로 안내문만 돌아갑니다. 검증 실패이지 AI 장애가 아니므로 템플릿 모드 배너를 띄우지 않습니다.
 - 되물음의 맥락은 **직전 assistant 발화 하나**입니다 — AI가 `recent_messages`에서 마지막 assistant 발화만 프롬프트에 싣습니다 (E-104).
 
 **503 `LLM_UNAVAILABLE`** — AI `/chat` 15초 초과·5xx.
