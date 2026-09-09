@@ -337,7 +337,7 @@ repeatCount(M)        = Σ txCount(M) OVER 묶음 WHERE 유효(E-72) ∧ RESOLVE
                         M < 첫 거래월     : 계산만, 저장 없음 (v2.11 — 거래가 없는 사용자도 같다)
                         현재 연월은 서비스가 Clock으로 넘긴다. rules/는 now()를 부르지 않는다
 확정된 달의 전월 값   = previousTotalSpending = totalSpending + savedAmount (savedAmount가 null이면 null)   # v2.11 — 저장값에서 역산
-                        previousRepeatCount   = M−1 스냅샷이 있으면 그 repeatCount, 없으면 null. 지금 거래로 다시 세지 않는다
+                        previousRepeatCount   = previousTotalSpending이 null이면 null, 아니면 M−1 스냅샷의 repeatCount(없으면 null). 지금 거래로 다시 세지 않는다
                         확정하지 않은 달(M = 현재 연월)의 전월 값은 M−1 스냅샷이 있으면 그것, 없으면 지금 거래로 계산
 
 Goal.currentAmount   += floor(savedAmount(M) × expectedSaving(goal) ÷ Σ expectedSaving)   # M = 현재 연월 − 1 확정 시 1회 · savedAmount > 0일 때만 (v2.11)

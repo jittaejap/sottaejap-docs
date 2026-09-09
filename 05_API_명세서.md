@@ -861,7 +861,7 @@
 | `yearMonth` | `YYYY-MM` · optional | **분석 기준월** (`GET /users/me`의 `analysisYearMonth`, E-60) | 미래 달(현재 KST 연월보다 뒤)은 400 |
 
 > **확정 규칙 (E-94).** `yearMonth`가 **지난달 이전**이면 첫 조회 때 계산해 `monthly_snapshots`에 저장하고 이후 그 값을 그대로 돌려줍니다 — 확정된 달은 회고를 더 해도 다시 계산하지 않습니다. **이번 달**이면 매번 계산하고 저장하지 않습니다(`finalized: false`). **첫 거래월 이전 달**도 저장하지 않습니다(`finalized: false`, v2.18). 스케줄러는 없습니다.
-> **확정된 달의 전월 값 (v2.18).** `previousTotalSpending`은 저장된 `savedAmount`에서 역산한 값이라 `savedAmount = previousTotalSpending − totalSpending`이 응답 안에서 항상 성립합니다. `previousRepeatCount`는 전월 스냅샷이 있으면 그 값, 없으면 `null`입니다 — 전월을 나중에 확정하면 한 번 채워지고 그 뒤로 움직이지 않습니다.
+> **확정된 달의 전월 값 (v2.18).** `previousTotalSpending`은 저장된 `savedAmount`에서 역산한 값이라 `savedAmount = previousTotalSpending − totalSpending`이 응답 안에서 항상 성립합니다. `previousRepeatCount`는 전월 스냅샷이 있으면 그 값, 없으면 `null`입니다 — 전월을 나중에 확정하면 한 번 채워지고 그 뒤로 움직이지 않습니다. 단, `previousTotalSpending`이 `null`(전월 없음으로 확정)이면 전월 스냅샷이 나중에 생겨도 같이 `null`입니다 — 두 값은 같은 전월을 말합니다.
 > **목표 실적.** **직전 달(현재 연월 − 1)** 이 확정되는 그 요청에서만(v2.18 — 그 이전 달은 확정만 합니다) `savedAmount > 0`이면 `ADOPTED` 제안이 붙은 목표에 `expectedSaving` 비율로 배분해 `Goal.currentAmount`에 더합니다(04 §3). 그때부터 `GET /goals`의 `achievementRate`가 움직입니다. 채택 자체는 여전히 `currentAmount`를 바꾸지 않습니다(E-82).
 > **데이터 없는 달도 200**입니다 — `totalSpending` 0, 전월이 없으면 `savedAmount` · `previousTotalSpending` · `previousRepeatCount`는 `null`.
 
