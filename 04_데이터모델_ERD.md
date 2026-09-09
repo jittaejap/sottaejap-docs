@@ -1,6 +1,8 @@
 # 소때잡 — 데이터 모델 · CSV 파싱 명세
 
-**버전:** v2.13 | **기준일:** 2026-09-09 | **담당:** 고현석
+**버전:** v2.14 | **기준일:** 2026-09-09 | **담당:** 고현석
+
+> **v2.14 변경 (2026-09-09):** §1 `Suggestion`에 **`reason` 컬럼**(TEXT · nullable)을 더합니다 (01 v2.25 E-103 · server 이슈 #43 · `V9`). AI가 쓴 이유 문장이고, 비어 있으면 화면이 템플릿 3종으로 채웁니다 (E-38).
 
 > **v2.13 변경 (2026-09-09):** §1 첫머리에 **바뀐 컬럼만 쓰는 엔티티 4종**(`User` · `BehaviorCluster` · `Suggestion` · `Goal`)의 일반 규칙을 적습니다 (01 v2.22 E-100 보강 · server PR #42 리뷰). 서로 다른 요청이 겹치지 않는 컬럼을 각자 읽어 고치는 엔티티는 `@DynamicUpdate`입니다. 스키마 변경 없음.
 >
@@ -167,6 +169,7 @@
 | expectedSaving | int | `avgAmount × adjustCount` |
 | goalId | FK → Goal | 배분 대상 |
 | status | enum | `PROPOSED` / `ADOPTED` / `REJECTED` |
+| reason | text · nullable | AI가 쓴 이유 문장 (E-103 · `V9`). `null`이면 화면이 템플릿 3종으로 채웁니다 (E-38). `adjustCount` · `expectedSaving`이 바뀌면 `null`로 되돌립니다 |
 | createdAt | timestamp | |
 
 > **(v2.6 — E-81) 재계산 파생 행입니다.** `recomputeAll`이 대상 묶음마다 `PROPOSED` 1행을 두고 제자리 갱신하며,
